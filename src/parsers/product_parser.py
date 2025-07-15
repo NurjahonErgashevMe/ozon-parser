@@ -20,6 +20,8 @@ class ProductInfo:
     card_price: int = 0
     price: int = 0
     original_price: int = 0
+    seller_id: str = ""
+    seller_link: str = ""
     success: bool = False
     error: str = ""
 
@@ -139,6 +141,15 @@ class ProductWorker:
                 # Информация о продавце
                 seller_info = sticky_product_data.get('seller', {})
                 product_info.company_name = seller_info.get('name', '')
+                product_info.company_inn = seller_info.get('inn', '')
+                
+                # Извлекаем ID и ссылку продавца
+                seller_link = seller_info.get('link', '')
+                if seller_link:
+                    seller_id = re.search(r'/seller/(\d+)/', seller_link)
+                    if seller_id:
+                        product_info.seller_id = seller_id.group(1)
+                        product_info.seller_link = f"https://ozon.ru/seller/{seller_id.group(1)}"
             
             # Ищем информацию о ценах в webPrice
             price_data = self._find_price_data(widget_states)

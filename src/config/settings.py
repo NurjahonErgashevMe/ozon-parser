@@ -7,11 +7,11 @@ class Settings:
     OUTPUT_DIR = BASE_DIR / "output"
     LOGS_DIR = BASE_DIR / "logs"
 
-    MAX_PRODUCTS = 50
+    MAX_PRODUCTS = 10
     MAX_WORKERS = 5
     WORKER_TIMEOUT = 30
 
-    HEADLESS = True
+    HEADLESS = False
     IMPLICIT_WAIT = 10
     PAGE_LOAD_TIMEOUT = 30
 
