@@ -3,6 +3,7 @@ import json
 import re
 import time
 import concurrent.futures
+import html
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
 from ..utils.selenium_manager import SeleniumManager
@@ -161,23 +162,20 @@ class SellerWorker:
                         text = item["textAtom"]["text"]
                         full_text += text + "\n"
                 
-                # Ищем ИНН (последовательность цифр)
+                # Ищем ИНН (последовательность цифр в конце)
                 inn_match = re.search(r'\d{10,15}', full_text)
                 if inn_match:
                     inn = inn_match.group(0)
                     
-                    # Ищем название компании в начале текста
-                    # Используем первую часть текста до &lt;br&gt;
+                    # Разбиваем по <br> и берем первую часть как название компании
                     parts = full_text.split('&lt;br&gt;')
                     if parts:
                         company_name = parts[0].strip()
-                    else:
-                        company_name = full_text.strip()
-                    
-                    # Заменяем экранированные кавычки на обычные
-                    company_name = company_name.replace('\\"', '"')
-                    
-                    return company_name, inn
+                        # Декодируем HTML-сущности
+                        company_name = html.unescape(company_name)
+                        return company_name, inn
+                
+                return "", ""
             
             return "", ""
         except Exception as e:

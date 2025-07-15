@@ -45,7 +45,7 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
         
         # URL категории для парсинга
-        category_url = "https://ozon.ru/category/sistemnye-bloki-15704/?__rr=2&abt_att=1&category_was_predicted=true&deny_category_prediction=true&from_global=true&origin_referer=www.ozon.ru&text=комьютер"
+        category_url = "https://www.ozon.ru/category/elektronika-15500/?category_was_predicted=true&deny_category_prediction=true&from_global=true&text=%D0%BA%D0%BE%D0%BC%D0%BF%D1%8C%D1%8E%D1%82%D0%B5%D1%80%D1%8B"
         
         logger.info(f"Начинаем парсинг категории: {category_url}")
         logger.info(f"Максимум товаров: {settings.MAX_PRODUCTS}")

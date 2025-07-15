@@ -162,8 +162,8 @@ class AppManager:
                 
                 # Если есть данные продавца, добавляем их
                 if seller_info:
-                    # Заменяем экранированные кавычки на обычные
-                    company_name = seller_info.company_name.replace('\\"', '"')
+                    # Заменяем кавычки на обычные
+                    company_name = seller_info.company_name.replace('\\"', '"').replace('\"', '"').replace('"', '"')
                     
                     seller_data.update({
                         'inn': seller_info.inn,
@@ -173,6 +173,10 @@ class AppManager:
                         'working_time': seller_info.working_time,
                         'average_rating': seller_info.average_rating
                     })
+                
+                # Заменяем кавычки в названии компании
+                if 'name' in seller_data:
+                    seller_data['name'] = seller_data['name'].replace('\\"', '"').replace('\"', '"').replace('"', '"')
                 
                 save_data['products'].append({
                     'article': product.article,

@@ -94,64 +94,55 @@ class OzonLinkParser:
             return False
     
     def _collect_links(self):
-        unique_links = set()
-        ordered_links = []
+        all_items = {}  # {data_index: (url, image_url)}
         
-        # Первичный сбор
-        current_links = self._extract_all_links()
-        new_links = set(current_links.keys()) - unique_links
-        
-        if new_links:
-            for link in new_links:
-                unique_links.add(link)
-                ordered_links.append(link)
-                self.collected_links[link] = current_links[link]
-        
-        # Продолжаем до набора нужного количества
-        while len(ordered_links) < self.max_products:
+        while len(all_items) < self.max_products:
+            current_items = self._extract_all_links()
+            
+            new_count = 0
+            for index, (url, img_url) in current_items.items():
+                if index not in all_items:
+                    all_items[index] = (url, img_url)
+                    new_count += 1
+            
+            if new_count > 0:
+                logger.info(f"Найдено новых товаров: {new_count}, всего: {len(all_items)}/{self.max_products}")
+            
+            if len(all_items) >= self.max_products:
+                break
+                
             self._scroll_to_bottom()
-            
-            current_links = self._extract_all_links()
-            new_links = set(current_links.keys()) - unique_links
-            
-            if new_links:
-                logger.info(f"Найдено новых ссылок: {len(new_links)}")
-                for link in new_links:
-                    unique_links.add(link)
-                    ordered_links.append(link)
-                    self.collected_links[link] = current_links[link]
-                    if len(ordered_links) >= self.max_products:
-                        break
-                logger.info(f"Собрано: {len(ordered_links)}/{self.max_products}")
-            
             time.sleep(0.5)
+        
+        # Сортируем по data-index и заполняем collected_links
+        sorted_items = sorted(all_items.items(), key=lambda x: x[0])
+        for index, (url, img_url) in sorted_items[:self.max_products]:
+            self.collected_links[url] = img_url
     
-    def _extract_all_links(self) -> Dict[str, str]:
+    def _extract_all_links(self) -> Dict[int, Tuple[str, str]]:
         try:
-            # Перенаходим контейнер каждый раз чтобы избежать stale element
             container = self.driver.find_element(By.ID, "contentScrollPaginator")
-            elements = container.find_elements(By.CSS_SELECTOR, "div[data-index]")
+            elements = container.find_elements(By.CSS_SELECTOR, "div.tile-root[data-index]")
             
-            links_with_images = {}
+            items_with_index = {}  # {data_index: (url, image_url)}
             
             for element in elements:
                 try:
-                    # Получаем атрибуты сразу, не сохраняя ссылки на элементы
-                    data_index = element.get_attribute("data-index")
+                    data_index = int(element.get_attribute("data-index"))
                     
-                    link_element = element.find_element(By.CSS_SELECTOR, "a.tile-clickable-element")
+                    link_element = element.find_element(By.CSS_SELECTOR, "a[data-prerender='true']")
                     href = link_element.get_attribute("href")
                     
-                    img_element = element.find_element(By.CSS_SELECTOR, "img")
+                    img_element = element.find_element(By.CSS_SELECTOR, "img[class*='i7p_24']")
                     img_url = img_element.get_attribute("src")
                     
                     if href and href.startswith("https://www.ozon.ru/product/") and img_url:
-                        links_with_images[href] = img_url
+                        items_with_index[data_index] = (href, img_url)
                         
                 except Exception:
                     continue
                 
-            return links_with_images
+            return items_with_index
             
         except Exception as e:
             logger.warning(f"Ошибка извлечения ссылок: {e}")
@@ -162,9 +153,8 @@ class OzonLinkParser:
             last_seen_index = -1
             
             while True:
-                # Перенаходим элементы каждый раз
                 container = self.driver.find_element(By.ID, "contentScrollPaginator")
-                items = container.find_elements(By.CSS_SELECTOR, "div[data-index]")
+                items = container.find_elements(By.CSS_SELECTOR, "div.tile-root[data-index]")
                 
                 if not items:
                     break
@@ -176,7 +166,6 @@ class OzonLinkParser:
                     
                 last_seen_index = current_last_index
                 
-                # Используем JavaScript для скролла вместо ссылки на элемент
                 self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                 time.sleep(0.5)
                 
