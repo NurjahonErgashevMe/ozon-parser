@@ -1,49 +1,43 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Главный файл приложения Ozon Parser - запуск GUI
+Запуск: python main.py
+"""
+
+import sys
 import logging
 from pathlib import Path
+
+# Добавляем корневую директорию в путь
+sys.path.insert(0, str(Path(__file__).parent))
+
 from src.config.settings import Settings
 from src.core.app_manager import AppManager
-from src.telegram.bot_manager import TelegramBotManager
+from src.gui.main_window import MainWindow
 from src.utils.logger import setup_logging
-from src.utils.config_loader import load_telegram_config
 
 def main():
-    setup_logging()
-    logger = logging.getLogger(__name__)
-    
+    """Запуск GUI для управления Telegram ботом"""
     try:
-        bot_token, chat_id = load_telegram_config()
+        # Настройка логирования
+        setup_logging()
+        logger = logging.getLogger(__name__)
+        logger.info("Запуск Telegram Bot Manager GUI")
         
-        if not bot_token:
-            print("❌ Укажите TELEGRAM_BOT_TOKEN в config.txt")
-            return
-            
-        if not chat_id:
-            print("❌ Укажите TELEGRAM_CHAT_ID в config.txt")
-            return
-        
+        # Загрузка настроек
         settings = Settings()
+        
+        # Создание менеджера приложения
         app_manager = AppManager(settings)
         
-        bot_manager = TelegramBotManager(bot_token, chat_id, app_manager)
+        # Создание и запуск GUI
+        gui = MainWindow(app_manager)
+        gui.run()
         
-        print("🤖 Запуск Telegram бота...")
-        
-        if bot_manager.start():
-            print("✅ Telegram бот запущен успешно")
-            
-            try:
-                while True:
-                    import time
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\n🛑 Остановка бота...")
-                bot_manager.stop()
-                app_manager.shutdown()
-        else:
-            print("❌ Ошибка запуска бота")
-            
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ Ошибка запуска GUI: {e}")
+        logging.error(f"Критическая ошибка GUI: {e}")
 
 if __name__ == "__main__":
     main()

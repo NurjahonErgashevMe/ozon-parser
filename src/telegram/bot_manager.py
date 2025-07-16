@@ -55,14 +55,21 @@ class TelegramBotManager:
     
     def start(self) -> bool:
         try:
+            # Запускаем бот в отдельном потоке
             self.bot_thread = threading.Thread(target=self._run_bot, daemon=True)
             self.bot_thread.start()
             
+            # Даем боту время на инициализацию
             import time
             time.sleep(2)
             
             if self.is_running:
-                asyncio.run(self.send_message("🤖 Ozon Parser бот запущен и готов к работе!"))
+                # Создаем отдельный поток для отправки стартового сообщения
+                notification_thread = threading.Thread(
+                    target=self._send_startup_notification,
+                    daemon=True
+                )
+                notification_thread.start()
                 return True
             else:
                 return False
@@ -70,6 +77,26 @@ class TelegramBotManager:
         except Exception as e:
             logger.error(f"Ошибка запуска Telegram бота: {e}")
             return False
+
+    def _send_startup_notification(self):
+        """Отправляет уведомление о запуске в отдельном потоке"""
+        try:
+            # Создаем новый бот для отправки сообщения
+            # Это избегает проблем с контекстом asyncio
+            temp_bot = Bot(token=self.bot_token)
+            
+            async def send_and_close():
+                try:
+                    await temp_bot.send_message(chat_id=self.user_id, 
+                                            text="🤖 Ozon Parser бот запущен и готов к работе!")
+                finally:
+                    await temp_bot.session.close()
+            
+            # Запускаем в новом цикле событий
+            asyncio.run(send_and_close())
+            
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления о запуске: {e}")
     
     def _run_bot(self):
         try:
@@ -500,8 +527,6 @@ class TelegramBotManager:
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения в Telegram: {e}")
             return False
-    
-
     
 
     

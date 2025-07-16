@@ -6,10 +6,20 @@ logger = logging.getLogger(__name__)
 
 def load_telegram_config() -> Tuple[Optional[str], Optional[str]]:
     """Загружает TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID из config.txt"""
-    config_path = Path(__file__).parent.parent.parent / "config.txt"
+    import sys
+    
+    # Определяем путь к config.txt
+    if getattr(sys, 'frozen', False):
+        # Если приложение скомпилировано (PyInstaller)
+        config_path = Path(sys.executable).parent / "config.txt"
+    else:
+        # Если запущено из исходников
+        config_path = Path(__file__).parent.parent.parent / "config.txt"
+    
+    logger.info(f"Поиск config.txt по пути: {config_path}")
     
     if not config_path.exists():
-        logger.warning("config.txt не найден")
+        logger.warning(f"config.txt не найден по пути: {config_path}")
         return None, None
     
     bot_token = None
