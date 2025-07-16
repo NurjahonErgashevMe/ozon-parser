@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class SeleniumManager:
     
-    def __init__(self, headless=False):
+    def __init__(self, headless=True):
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
@@ -22,18 +22,15 @@ class SeleniumManager:
     def create_driver(self) -> webdriver.Chrome:
         chrome_options = Options()
         
-
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
         
-
         if self.headless:
             chrome_options.add_argument("--headless")
         
@@ -66,6 +63,51 @@ class SeleniumManager:
             
         except WebDriverException as e:
             logger.error(f"Ошибка создания Chrome драйвера: {e}")
+            raise
+    
+    def create_driver_with_logging(self) -> webdriver.Chrome:
+        chrome_options = Options()
+        
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_experimental_option('perfLoggingPrefs', {'enableNetwork': True, 'enablePage': False})
+        chrome_options.add_experimental_option('loggingPrefs', {'performance': 'ALL'})
+        
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-plugins")
+        
+        if self.headless:
+            chrome_options.add_argument("--headless")
+        
+        chrome_options.add_argument("--window-size=1920,1080")
+        
+        try:
+            driver = webdriver.Chrome(options=chrome_options)
+            
+            stealth(driver,
+                   languages=["ru-RU", "ru"],
+                   vendor="Google Inc.",
+                   platform="Win32",
+                   webgl_vendor="Intel Inc.",
+                   renderer="Intel Iris OpenGL Engine",
+                   fix_hairline=True)
+            
+            driver.implicitly_wait(10)
+            driver.set_page_load_timeout(30)
+            
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            self.driver = driver
+            self.wait = WebDriverWait(driver, 10)
+            
+            logger.info("Chrome драйвер с логированием создан успешно")
+            return driver
+            
+        except WebDriverException as e:
+            logger.error(f"Ошибка создания Chrome драйвера с логированием: {e}")
             raise
     
     def navigate_to_url(self, url: str) -> bool:
