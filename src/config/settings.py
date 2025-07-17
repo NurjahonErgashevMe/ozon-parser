@@ -7,7 +7,7 @@ class Settings:
     LOGS_DIR = BASE_DIR / "logs"
 
     MAX_PRODUCTS = 50
-    MAX_WORKERS = 5
+    MAX_WORKERS = 10
     WORKER_TIMEOUT = 30
 
     HEADLESS = True

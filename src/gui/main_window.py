@@ -124,40 +124,18 @@ class MainWindow:
             }
         return {}
     
-
     
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
     
     def _on_closing(self):
-        """Обработчик закрытия окна"""
         try:
             if messagebox.askokcancel("Выход", "Вы уверены, что хотите выйти?"):
                 logger.info("Закрытие приложения...")
-                
-                # Останавливаем все процессы
-                self.app_manager.shutdown()
-                
-                # Очищаем ресурсы вкладок
-                if self.logs_tab:
-                    self.logs_tab.cleanup()
-                
-                # Закрываем окно
-                self.root.destroy()
-                
+
+                # 🚀 shutdown in a daemon thread so GUI stays responsive
+                threading.Thread(target=self.app_manager.shutdown, daemon=True).start()
+
+                # schedule actual window destroy
+                self.root.after(200, self.root.destroy)
         except Exception as e:
             logger.error(f"Ошибка закрытия: {e}")
             self.root.destroy()

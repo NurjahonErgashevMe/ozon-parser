@@ -201,22 +201,25 @@ class SeleniumManager:
             logger.error(f"Ошибка извлечения JSON из HTML: {e}")
             return None
     
-    def _wait_for_antibot_bypass(self, max_wait_time: int = 120):
+    def _wait_for_antibot_bypass(self, max_wait_time: int = 240):   # ⬅️ 120 → 240
         start_time = time.time()
         reload_attempts = 0
         max_reload_attempts = 3
-        
+
         while time.time() - start_time < max_wait_time:
             try:
                 if self._is_blocked():
                     if reload_attempts < max_reload_attempts:
-                        logger.info(f"Обнаружена блокировка, перезагрузка страницы (попытка {reload_attempts + 1}/{max_reload_attempts})")
+                        logger.info(
+                            f"Обнаружена блокировка, перезагрузка страницы "
+                            f"(попытка {reload_attempts + 1}/{max_reload_attempts})"
+                        )
                         self.driver.refresh()
                         reload_attempts += 1
-                        time.sleep(10)  # Увеличенное время ожидания после перезагрузки
+                        time.sleep(10)      
                         continue
                     else:
-                        logger.warning("Превышено количество попыток перезагрузки, возвращаем новый драйвер")
+                        logger.warning("Превышено кол-во попыток, возвращаем новый драйвер")
                         raise Exception("Access blocked after retries")
                 else:
                     logger.info("Антибот защита пройдена")
@@ -224,9 +227,9 @@ class SeleniumManager:
             except Exception as e:
                 if "Access blocked" in str(e):
                     raise
-                time.sleep(5)  # Увеличенное время ожидания между проверками
+                time.sleep(10)  
                 continue
-        
+
         logger.warning(f"Антибот защита не пройдена за {max_wait_time} секунд")
         raise Exception("Antibot timeout")
     

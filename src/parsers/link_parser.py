@@ -77,32 +77,32 @@ class OzonLinkParser:
         seen_urls = set()
         scroll_num = 0
         no_new_items_count = 0
-        
+
         while len(self.collected_links) < self.max_products:
             scroll_num += 1
             current_items = self._extract_all_links()
-            
+
             new_count = 0
             for url, img_url in current_items.items():
                 if url not in seen_urls and len(self.collected_links) < self.max_products:
                     seen_urls.add(url)
                     self.collected_links[url] = img_url
                     new_count += 1
-            
+
             logger.info(f"Скролл {scroll_num}: +{new_count}, всего {len(self.collected_links)}/{self.max_products}")
-            
+
             if new_count == 0:
                 no_new_items_count += 1
                 if no_new_items_count >= 3:
                     break
             else:
                 no_new_items_count = 0
-            
+
             if len(self.collected_links) >= self.max_products:
                 break
-            
+
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)
+            time.sleep(6)    
     
     def _extract_all_links(self) -> Dict[str, str]:
         try:

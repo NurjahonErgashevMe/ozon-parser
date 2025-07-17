@@ -300,7 +300,6 @@ class OzonProductParser:
     
     def _worker_task_with_retry(self, worker_id: int, articles: List[str]) -> List[ProductInfo]:
         max_worker_retries = 3
-        
         for attempt in range(max_worker_retries):
             worker = ProductWorker(worker_id)
             try:
@@ -309,12 +308,13 @@ class OzonProductParser:
             except Exception as e:
                 worker.close()
                 if "Access blocked" in str(e) and attempt < max_worker_retries - 1:
-                    logger.warning(f"Воркер {worker_id} заблокирован, пересоздаем (попытка {attempt + 1})")
-                    time.sleep(5)
+                    logger.warning(
+                        f"Воркер {worker_id} заблокирован, пересоздаем (попытка {attempt + 1}/3)"
+                    )
+                    time.sleep(10)     
                     continue
                 else:
                     raise
-        
         return []
     
     def _sort_results_by_original_order(self, results: List[ProductInfo], original_articles: List[str]) -> List[ProductInfo]:

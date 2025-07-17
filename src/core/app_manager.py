@@ -384,5 +384,9 @@ class AppManager:
             logger.error(f"Ошибка удаления папки: {e}")
     
     def shutdown(self):
+        # non-blocking wrapper
+        threading.Thread(target=self._do_shutdown, daemon=True).start()
+
+    def _do_shutdown(self):
         self.stop_parsing()
         self.stop_telegram_bot()

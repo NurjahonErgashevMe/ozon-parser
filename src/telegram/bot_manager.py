@@ -602,20 +602,11 @@ class TelegramBotManager:
     
     def stop(self):
         try:
-
             self.is_running = False
-            
-            # Останавливаем поллинг
-            if hasattr(self, 'dp') and self.dp:
-                try:
-                    asyncio.run(self.dp.stop_polling())
-                except:
-                    pass
-            
+            # 🚀 non-blocking stop
+            if hasattr(self, 'dp') and self.dp and self.dp._loop and not self.dp._loop.is_closed():
+                asyncio.run_coroutine_threadsafe(self.dp.stop_polling(), self.dp._loop)
             if self.bot_thread and self.bot_thread.is_alive():
-                self.bot_thread.join(timeout=3)
-            
-
-            
+                self.bot_thread.join(timeout=2)
         except Exception as e:
             logger.error(f"Ошибка остановки Telegram бота: {e}")

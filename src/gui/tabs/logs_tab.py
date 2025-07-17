@@ -34,8 +34,8 @@ class LogsTab:
         
         ttk.Button(log_buttons_frame, text="🗑️ Очистить логи", 
                   command=self._clear_logs).pack(side=tk.LEFT, padx=5)
-        ttk.Button(log_buttons_frame, text="💾 Сохранить логи", 
-                  command=self._save_logs).pack(side=tk.LEFT, padx=5)
+        # ttk.Button(log_buttons_frame, text="💾 Сохранить логи", 
+        #           command=self._save_logs).pack(side=tk.LEFT, padx=5)
         ttk.Button(log_buttons_frame, text="🔄 Обновить", 
                   command=self._refresh_logs).pack(side=tk.LEFT, padx=5)
         
