@@ -10,7 +10,7 @@ class Settings:
     MAX_WORKERS = 5
     WORKER_TIMEOUT = 30
 
-    HEADLESS = False
+    HEADLESS = True
     IMPLICIT_WAIT = 10
     PAGE_LOAD_TIMEOUT = 30
 

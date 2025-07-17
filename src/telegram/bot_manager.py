@@ -23,6 +23,7 @@ class ParsingStates(StatesGroup):
 FIELD_NAMES = {
     'article': 'Артикул',
     'name': 'Название товара',
+    'seller_name': 'Продавец',
     'company_name': 'Название компании',
     'inn': 'ИНН',
     'card_price': 'Цена карты',

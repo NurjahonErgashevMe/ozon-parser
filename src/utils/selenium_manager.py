@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class SeleniumManager:
     
-    def __init__(self, headless=False):
+    def __init__(self, headless=True):
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
@@ -131,7 +131,7 @@ class SeleniumManager:
             logger.error(f"Ошибка WebDriver: {e}")
             return False
     
-    def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
+    def wait_for_json_response(self, timeout: int = 60) -> Optional[str]:
         if not self.driver:
             return None
             
@@ -140,7 +140,7 @@ class SeleniumManager:
             start_time = time.time()
             
 
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, 20).until(
                 lambda driver: driver.execute_script("return document.readyState") == "complete"
             )
             
@@ -159,11 +159,11 @@ class SeleniumManager:
                         except json.JSONDecodeError:
                             pass
                     
-                    time.sleep(0.5)
+                    time.sleep(1.5)  # Увеличенное время ожидания между проверками
                     
                 except Exception as e:
                     logger.debug(f"Ошибка проверки содержимого страницы: {e}")
-                    time.sleep(0.5)
+                    time.sleep(1.5)  # Увеличенное время ожидания при ошибке
                     continue
             
             logger.warning(f"Таймаут ожидания JSON ответа после {timeout} секунд")
@@ -201,7 +201,7 @@ class SeleniumManager:
             logger.error(f"Ошибка извлечения JSON из HTML: {e}")
             return None
     
-    def _wait_for_antibot_bypass(self, max_wait_time: int = 60):
+    def _wait_for_antibot_bypass(self, max_wait_time: int = 120):
         start_time = time.time()
         reload_attempts = 0
         max_reload_attempts = 3
@@ -213,7 +213,7 @@ class SeleniumManager:
                         logger.info(f"Обнаружена блокировка, перезагрузка страницы (попытка {reload_attempts + 1}/{max_reload_attempts})")
                         self.driver.refresh()
                         reload_attempts += 1
-                        time.sleep(5)
+                        time.sleep(10)  # Увеличенное время ожидания после перезагрузки
                         continue
                     else:
                         logger.warning("Превышено количество попыток перезагрузки, возвращаем новый драйвер")
@@ -224,7 +224,7 @@ class SeleniumManager:
             except Exception as e:
                 if "Access blocked" in str(e):
                     raise
-                time.sleep(2)
+                time.sleep(5)  # Увеличенное время ожидания между проверками
                 continue
         
         logger.warning(f"Антибот защита не пройдена за {max_wait_time} секунд")

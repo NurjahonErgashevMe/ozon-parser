@@ -22,7 +22,8 @@ class ExcelExporter:
             field_mapping = {
                 'article': ('Артикул', lambda p: p.get('article', '')),
                 'name': ('Название товара', lambda p: p.get('name', '')),
-                'company_name': ('Продавец', lambda p: p.get('seller', {}).get('name', '')),
+                'seller_name': ('Продавец', lambda p: p.get('seller', {}).get('name', '')),
+                'company_name': ('Название компании', lambda p: p.get('seller', {}).get('company_name', '')),
                 'inn': ('ИНН', lambda p: p.get('seller', {}).get('inn', '')),
                 'card_price': ('Цена карты', lambda p: p.get('card_price', 0)),
                 'price': ('Цена', lambda p: p.get('price', 0)),
@@ -40,8 +41,10 @@ class ExcelExporter:
                 headers = [field_mapping[field][0] for field in selected_fields if field in field_mapping]
                 field_extractors = [field_mapping[field][1] for field in selected_fields if field in field_mapping]
             else:
-                headers = [field_mapping[field][0] for field in field_mapping.keys()]
-                field_extractors = [field_mapping[field][1] for field in field_mapping.keys()]
+                # По умолчанию: название товара, название компании, ссылка на товар и изображение
+                default_fields = ['name', 'company_name', 'product_url', 'image_url']
+                headers = [field_mapping[field][0] for field in default_fields]
+                field_extractors = [field_mapping[field][1] for field in default_fields]
             
             # Стили
             header_font = Font(name='Arial', size=11, bold=True, color='FFFFFF')
@@ -80,7 +83,7 @@ class ExcelExporter:
                         cell.fill = fill
             
             # Ширина колонок (адаптивная)
-            default_widths = {'Артикул': 12, 'Название товара': 40, 'Продавец': 25, 'ИНН': 15, 
+            default_widths = {'Артикул': 12, 'Название товара': 40, 'Продавец': 25, 'Название компании': 30, 'ИНН': 15, 
                             'Цена карты': 12, 'Цена': 12, 'Старая цена': 12, 'Ссылка товара': 50, 
                             'Изображение': 50, 'Заказов': 12, 'Отзывов': 12, 'Рейтинг': 12, 'Работает с': 15}
             
