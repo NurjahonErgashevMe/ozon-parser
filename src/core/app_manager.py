@@ -60,6 +60,9 @@ class AppManager:
         product_parser = OzonProductParser(self.settings.MAX_WORKERS)
         product_results = product_parser.parse_products(product_links)
         
+        # Принудительно закрываем все воркеры продуктов перед началом парсинга продавцов
+        product_parser.cleanup()
+        
         if self.stop_event.is_set():
             return
         
@@ -72,8 +75,11 @@ class AppManager:
         
         seller_results = []
         if unique_seller_ids:
+            logger.info(f"Начинаем парсинг {len(unique_seller_ids)} продавцов после закрытия всех воркеров продуктов")
             seller_parser = OzonSellerParser(self.settings.MAX_WORKERS)
             seller_results = seller_parser.parse_sellers(unique_seller_ids)
+            # Закрываем воркеры продавцов после завершения
+            seller_parser.cleanup()
         
         if self.stop_event.is_set():
             return
@@ -246,12 +252,18 @@ class AppManager:
         except Exception as e:
             logger.error(f"Ошибка экспорта в Excel: {e}")
     
-    def start_telegram_bot(self, bot_token: str, user_id: str) -> bool:
+    def start_telegram_bot(self, bot_token: str, user_ids) -> bool:
         try:
             if self.telegram_bot:
                 self.telegram_bot.stop()
             
-            self.telegram_bot = TelegramBotManager(bot_token, user_id, self)
+            # Поддерживаем как строку, так и массив для обратной совместимости
+            if isinstance(user_ids, str):
+                user_ids = [user_ids]
+            elif not isinstance(user_ids, list):
+                user_ids = list(user_ids)
+            
+            self.telegram_bot = TelegramBotManager(bot_token, user_ids, self)
             return self.telegram_bot.start()
         except Exception as e:
             logger.error(f"Ошибка запуска Telegram бота: {e}")

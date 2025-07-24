@@ -39,9 +39,9 @@ FIELD_NAMES = {
 
 class TelegramBotManager:
     
-    def __init__(self, bot_token: str, user_id: str, app_manager: 'AppManager'):
+    def __init__(self, bot_token: str, user_ids: list, app_manager: 'AppManager'):
         self.bot_token = bot_token
-        self.user_id = user_id
+        self.user_ids = user_ids  # Список разрешенных User ID
         self.app_manager = app_manager
         self.bot = Bot(token=bot_token)
         self.dp = Dispatcher()
@@ -88,8 +88,10 @@ class TelegramBotManager:
             
             async def send_and_close():
                 try:
-                    await temp_bot.send_message(chat_id=self.user_id, 
-                                            text="🤖 Ozon Parser бот запущен и готов к работе!")
+                    # Отправляем уведомление всем разрешенным пользователям
+                    for user_id in self.user_ids:
+                        await temp_bot.send_message(chat_id=user_id, 
+                                                text="🤖 Ozon Parser бот запущен и готов к работе!")
                 finally:
                     await temp_bot.session.close()
             
@@ -505,8 +507,8 @@ class TelegramBotManager:
     
     def _is_authorized_user(self, message_or_query) -> bool:
         user_id = str(message_or_query.from_user.id)
-        if user_id != self.user_id:
-    
+        if user_id not in self.user_ids:
+            logger.warning(f"Неавторизованный пользователь {user_id} пытается использовать бота")
             return False
         return True
     
@@ -522,8 +524,16 @@ class TelegramBotManager:
             if not self.is_running:
                 return False
             
-            await self.bot.send_message(chat_id=self.user_id, text=text)
-            return True
+            # Отправляем сообщение всем авторизованным пользователям
+            success = True
+            for user_id in self.user_ids:
+                try:
+                    await self.bot.send_message(chat_id=user_id, text=text)
+                except Exception as e:
+                    logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+                    success = False
+            
+            return success
             
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения в Telegram: {e}")

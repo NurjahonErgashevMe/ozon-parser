@@ -61,7 +61,7 @@ class OzonLinkParser:
             if not self.selenium_manager.navigate_to_url(self.category_url):
                 return False
             
-            WebDriverWait(self.driver, 30).until(
+            WebDriverWait(self.driver, 60).until(
                 EC.presence_of_element_located((By.ID, "contentScrollPaginator"))
             )
             return True
@@ -102,7 +102,7 @@ class OzonLinkParser:
                 break
 
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(6)    
+            time.sleep(8)    
     
     def _extract_all_links(self) -> Dict[str, str]:
         try:

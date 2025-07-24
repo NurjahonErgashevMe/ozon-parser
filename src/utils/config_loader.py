@@ -66,3 +66,17 @@ def load_telegram_config() -> Tuple[Optional[str], Optional[str]]:
     chat_id = config.get('TELEGRAM_CHAT_ID')
     
     return bot_token, chat_id
+
+def load_telegram_config_multi() -> Tuple[Optional[str], list]:
+    """Загружает TELEGRAM_BOT_TOKEN и список TELEGRAM_CHAT_ID из config.txt"""
+    config = read_config()
+    
+    bot_token = config.get('TELEGRAM_BOT_TOKEN')
+    chat_ids_str = config.get('TELEGRAM_CHAT_ID', '')
+    
+    # Парсим список User ID
+    chat_ids = []
+    if chat_ids_str:
+        chat_ids = [uid.strip() for uid in chat_ids_str.split(',') if uid.strip()]
+    
+    return bot_token, chat_ids

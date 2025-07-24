@@ -73,7 +73,7 @@ class ProductWorker:
                 logger.error(f"Воркер {self.worker_id}: Критическая ошибка товара {article}: {e}")
                 results.append(ProductInfo(article=article, error=str(e)))
             
-            time.sleep(0.5)
+            time.sleep(1.5)
         
         return results
     
@@ -88,16 +88,16 @@ class ProductWorker:
                 # Переходим на страницу API
                 if not self.selenium_manager.navigate_to_url(api_url):
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(5)
                         continue
                     return ProductInfo(article=article, error="Не удалось загрузить страницу API")
                 
                 # Ждем JSON ответ
-                json_content = self.selenium_manager.wait_for_json_response(timeout=15)
+                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
                 
                 if not json_content:
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(5)
                         continue
                     return ProductInfo(article=article, error="Не получен JSON ответ")
                 
@@ -107,7 +107,7 @@ class ProductWorker:
                 if product_info.success:
                     return product_info
                 elif attempt < max_retries - 1:
-                    time.sleep(2)
+                    time.sleep(5)
                     continue
                 else:
                     return product_info
@@ -115,7 +115,7 @@ class ProductWorker:
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.debug(f"Попытка {attempt + 1} неудачна для товара {article}: {e}")
-                    time.sleep(2)
+                    time.sleep(5)
                     continue
                 else:
                     return ProductInfo(article=article, error=f"Ошибка парсинга: {str(e)}")
@@ -304,20 +304,30 @@ class OzonProductParser:
             worker = ProductWorker(worker_id)
             try:
                 worker.initialize()
-                return worker.parse_products(articles, self.product_links)
+                results = worker.parse_products(articles, self.product_links)
+                return results
             except Exception as e:
-                worker.close()
                 if "Access blocked" in str(e) and attempt < max_worker_retries - 1:
                     logger.warning(
                         f"Воркер {worker_id} заблокирован, пересоздаем (попытка {attempt + 1}/3)"
                     )
-                    time.sleep(10)     
+                    time.sleep(15)     
                     continue
                 else:
                     raise
+            finally:
+                # Гарантируем закрытие воркера в любом случае
+                worker.close()
         return []
     
     def _sort_results_by_original_order(self, results: List[ProductInfo], original_articles: List[str]) -> List[ProductInfo]:
         result_dict = {result.article: result for result in results}
         return [result_dict.get(article, ProductInfo(article=article, error="Не обработан")) 
                 for article in original_articles]
+    
+    def cleanup(self):
+        """Принудительная очистка всех ресурсов парсера"""
+        logger.info("Очистка ресурсов парсера товаров...")
+        # Даем время на завершение всех потоков
+        time.sleep(2)
+        logger.info("Ресурсы парсера товаров очищены")

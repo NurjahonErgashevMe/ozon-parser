@@ -97,13 +97,13 @@ class ControlTab:
                 
                 config = self.main_window.get_config_data()
                 bot_token = config.get('bot_token')
-                user_id = config.get('user_id')
+                user_ids = config.get('user_ids', [])
                 
-                if not bot_token or not user_id:
+                if not bot_token or not user_ids:
                     messagebox.showerror("Ошибка", "Настройте токен бота и User ID на вкладке 'Конфигурация'")
                     return
                 
-                success = self.app_manager.start_telegram_bot(bot_token, user_id)
+                success = self.app_manager.start_telegram_bot(bot_token, user_ids)
                 
                 if success:
                     messagebox.showinfo("Успех", "Telegram бот запущен")
@@ -138,14 +138,14 @@ class ControlTab:
                 
                 config = self.main_window.get_config_data()
                 bot_token = config.get('bot_token')
-                user_id = config.get('user_id')
+                user_ids = config.get('user_ids', [])
                 
-                if not bot_token or not user_id:
+                if not bot_token or not user_ids:
                     messagebox.showerror("Ошибка", "Настройте токен бота и User ID на вкладке 'Конфигурация'")
                     return
                 
                 # Запускаем заново
-                success = self.app_manager.start_telegram_bot(bot_token, user_id)
+                success = self.app_manager.start_telegram_bot(bot_token, user_ids)
                 
                 if success:
                     messagebox.showinfo("Успех", "Telegram бот перезапущен")

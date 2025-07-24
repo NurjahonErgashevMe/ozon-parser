@@ -56,7 +56,7 @@ class SellerWorker:
                 logger.error(f"Воркер {self.worker_id}: Критическая ошибка продавца {seller_id}: {e}")
                 results.append(SellerInfo(seller_id=seller_id, error=str(e)))
 
-            time.sleep(0.5)
+            time.sleep(1.5)
 
         return results
 
@@ -69,15 +69,15 @@ class SellerWorker:
 
                 if not self.selenium_manager.navigate_to_url(api_url):
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(5)
                         continue
                     return SellerInfo(seller_id=seller_id, error="Не удалось загрузить страницу API")
 
-                json_content = self.selenium_manager.wait_for_json_response(timeout=15)
+                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
 
                 if not json_content:
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(5)
                         continue
                     return SellerInfo(seller_id=seller_id, error="Не получен JSON ответ")
 
@@ -86,7 +86,7 @@ class SellerWorker:
                 if seller_info.success:
                     return seller_info
                 elif attempt < max_retries - 1:
-                    time.sleep(2)
+                    time.sleep(5)
                     continue
                 else:
                     return seller_info
@@ -94,7 +94,7 @@ class SellerWorker:
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.debug(f"Попытка {attempt + 1} неудачна для продавца {seller_id}: {e}")
-                    time.sleep(2)
+                    time.sleep(5)
                     continue
                 else:
                     return SellerInfo(seller_id=seller_id, error=f"Ошибка парсинга: {str(e)}")
@@ -322,15 +322,25 @@ class OzonSellerParser:
             worker = SellerWorker(worker_id)
             try:
                 worker.initialize()
-                return worker.parse_sellers(seller_ids)
+                results = worker.parse_sellers(seller_ids)
+                return results
             except Exception as e:
-                worker.close()
                 if "Access blocked" in str(e) and attempt < max_worker_retries - 1:
                     logger.warning(
                         f"Воркер продавцов {worker_id} заблокирован, пересоздаем (попытка {attempt + 1}/3)"
                     )
-                    time.sleep(10)
+                    time.sleep(15)
                     continue
                 else:
                     raise
+            finally:
+                # Гарантируем закрытие воркера в любом случае
+                worker.close()
         return []
+    
+    def cleanup(self):
+        """Принудительная очистка всех ресурсов парсера"""
+        logger.info("Очистка ресурсов парсера продавцов...")
+        # Даем время на завершение всех потоков
+        time.sleep(2)
+        logger.info("Ресурсы парсера продавцов очищены")

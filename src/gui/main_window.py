@@ -118,9 +118,17 @@ class MainWindow:
     def get_config_data(self):
         """Получение данных конфигурации из вкладки"""
         if self.config_tab:
+            # Собираем все User ID из массива
+            user_ids = []
+            for var in self.config_tab.user_id_vars:
+                user_id = var.get().strip()
+                if user_id:  # Добавляем только непустые ID
+                    user_ids.append(user_id)
+            
             return {
                 'bot_token': self.config_tab.bot_token_var.get().strip(),
-                'user_id': self.config_tab.user_id_var.get().strip()
+                'user_ids': user_ids,  # Возвращаем массив ID
+                'user_id': user_ids[0] if user_ids else ''  # Для обратной совместимости
             }
         return {}
     

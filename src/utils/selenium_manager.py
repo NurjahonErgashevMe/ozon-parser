@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class SeleniumManager:
     
-    def __init__(self, headless=True):
+    def __init__(self, headless=False):
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
@@ -49,14 +49,14 @@ class SeleniumManager:
                    fix_hairline=True)
             
 
-            driver.implicitly_wait(10)
-            driver.set_page_load_timeout(30)
+            driver.implicitly_wait(20)
+            driver.set_page_load_timeout(60)
             
 
             driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             self.driver = driver
-            self.wait = WebDriverWait(driver, 10)
+            self.wait = WebDriverWait(driver, 20)
             
             logger.info("Chrome драйвер создан успешно")
             return driver
@@ -95,13 +95,13 @@ class SeleniumManager:
                    renderer="Intel Iris OpenGL Engine",
                    fix_hairline=True)
             
-            driver.implicitly_wait(10)
-            driver.set_page_load_timeout(30)
+            driver.implicitly_wait(20)
+            driver.set_page_load_timeout(60)
             
             driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             self.driver = driver
-            self.wait = WebDriverWait(driver, 10)
+            self.wait = WebDriverWait(driver, 20)
             
             logger.info("Chrome драйвер с логированием создан успешно")
             return driver
@@ -131,7 +131,7 @@ class SeleniumManager:
             logger.error(f"Ошибка WebDriver: {e}")
             return False
     
-    def wait_for_json_response(self, timeout: int = 60) -> Optional[str]:
+    def wait_for_json_response(self, timeout: int = 90) -> Optional[str]:
         if not self.driver:
             return None
             
@@ -140,7 +140,7 @@ class SeleniumManager:
             start_time = time.time()
             
 
-            WebDriverWait(self.driver, 20).until(
+            WebDriverWait(self.driver, 30).until(
                 lambda driver: driver.execute_script("return document.readyState") == "complete"
             )
             
@@ -159,11 +159,11 @@ class SeleniumManager:
                         except json.JSONDecodeError:
                             pass
                     
-                    time.sleep(1.5)  # Увеличенное время ожидания между проверками
+                    time.sleep(2.5)  # Увеличенное время ожидания между проверками
                     
                 except Exception as e:
                     logger.debug(f"Ошибка проверки содержимого страницы: {e}")
-                    time.sleep(1.5)  # Увеличенное время ожидания при ошибке
+                    time.sleep(2.5)  # Увеличенное время ожидания при ошибке
                     continue
             
             logger.warning(f"Таймаут ожидания JSON ответа после {timeout} секунд")
@@ -216,7 +216,7 @@ class SeleniumManager:
                         )
                         self.driver.refresh()
                         reload_attempts += 1
-                        time.sleep(10)      
+                        time.sleep(15)      
                         continue
                     else:
                         logger.warning("Превышено кол-во попыток, возвращаем новый драйвер")
@@ -227,7 +227,7 @@ class SeleniumManager:
             except Exception as e:
                 if "Access blocked" in str(e):
                     raise
-                time.sleep(10)  
+                time.sleep(15)  
                 continue
 
         logger.warning(f"Антибот защита не пройдена за {max_wait_time} секунд")
