@@ -7,6 +7,7 @@ import html
 from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass
 from ..utils.selenium_manager import SeleniumManager
+from ..utils.resource_manager import resource_manager
 
 logger = logging.getLogger(__name__)
 
@@ -239,9 +240,10 @@ class SellerWorker:
 
 
 class OzonSellerParser:
-    def __init__(self, max_workers: int = 5):
+    def __init__(self, max_workers: int = 5, user_id: str = None):
         self.max_workers = max_workers
-        logger.info(f"Парсер продавцов инициализирован с {max_workers} воркерами")
+        self.user_id = user_id
+        logger.info(f"Парсер продавцов инициализирован с макс {max_workers} воркерами для пользователя {user_id}")
 
     def parse_sellers(self, seller_ids: List[str]) -> List[SellerInfo]:
         unique_seller_ids = list(set(seller_ids))
@@ -250,14 +252,25 @@ class OzonSellerParser:
             logger.error("Не найдено ID продавцов для парсинга")
             return []
 
-        optimal_workers = self._calculate_optimal_workers(len(unique_seller_ids))
-
-        logger.info(f"Начало парсинга {len(unique_seller_ids)} продавцов с {optimal_workers} воркерами")
-
-        if optimal_workers == 1:
-            return self._parse_single_worker(unique_seller_ids)
+        # Получаем количество воркеров от менеджера ресурсов
+        if self.user_id:
+            allocated_workers = resource_manager.start_parsing_session(
+                self.user_id, 'sellers', len(unique_seller_ids)
+            )
         else:
-            return self._parse_multiple_workers(unique_seller_ids, optimal_workers)
+            allocated_workers = self._calculate_optimal_workers(len(unique_seller_ids))
+
+        logger.info(f"Начало парсинга {len(unique_seller_ids)} продавцов с {allocated_workers} воркерами для пользователя {self.user_id}")
+
+        try:
+            if allocated_workers == 1:
+                return self._parse_single_worker(unique_seller_ids)
+            else:
+                return self._parse_multiple_workers(unique_seller_ids, allocated_workers)
+        finally:
+            # Завершаем сессию парсинга
+            if self.user_id:
+                resource_manager.finish_parsing_session(self.user_id)
 
     def _parse_single_worker(self, seller_ids: List[str]) -> List[SellerInfo]:
         worker = SellerWorker(1)
@@ -274,10 +287,8 @@ class OzonSellerParser:
             return 2
         elif total_sellers <= 50:
             return 3
-        elif total_sellers <= 75:
-            return 4
         else:
-            return min(5, self.max_workers)
+            return min(5, self.max_workers)  # Максимум 5 воркеров
 
     def _parse_multiple_workers(self, seller_ids: List[str], num_workers: int) -> List[SellerInfo]:
         chunks = self._distribute_seller_ids(seller_ids, num_workers)

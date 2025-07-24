@@ -9,14 +9,16 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from typing import Dict, Tuple
 from ..utils.selenium_manager import SeleniumManager
+from ..utils.resource_manager import resource_manager
 
 logger = logging.getLogger(__name__)
 
 class OzonLinkParser:
     
-    def __init__(self, category_url: str, max_products: int = 100):
+    def __init__(self, category_url: str, max_products: int = 100, user_id: str = None):
         self.category_url = category_url
         self.max_products = max_products
+        self.user_id = user_id
         self.selenium_manager = SeleniumManager()
         self.driver = None
         self.collected_links = {}
@@ -38,6 +40,10 @@ class OzonLinkParser:
     
     def start_parsing(self) -> Tuple[bool, Dict[str, str]]:
         try:
+            # Регистрируем сессию парсинга ссылок
+            if self.user_id:
+                resource_manager.start_parsing_session(self.user_id, 'links', self.max_products)
+            
             self._create_output_folder()
             self.driver = self.selenium_manager.create_driver()
             
@@ -47,7 +53,7 @@ class OzonLinkParser:
             self._collect_links()
             success = self._save_links()
             
-            logger.info(f"Собрано {len(self.collected_links)} ссылок")
+            logger.info(f"Собрано {len(self.collected_links)} ссылок для пользователя {self.user_id}")
             return success, self.collected_links
             
         except Exception as e:
@@ -55,6 +61,9 @@ class OzonLinkParser:
             return False, {}
         finally:
             self._cleanup()
+            # Завершаем сессию парсинга ссылок
+            if self.user_id:
+                resource_manager.finish_parsing_session(self.user_id)
     
     def _load_page(self) -> bool:
         try:

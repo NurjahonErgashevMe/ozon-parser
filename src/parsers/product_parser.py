@@ -7,6 +7,7 @@ import concurrent.futures
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from ..utils.selenium_manager import SeleniumManager
+from ..utils.resource_manager import resource_manager
 
 logger = logging.getLogger(__name__)
 
@@ -205,10 +206,11 @@ class ProductWorker:
 
 class OzonProductParser:
     
-    def __init__(self, max_workers: int = 5):
+    def __init__(self, max_workers: int = 5, user_id: str = None):
         self.max_workers = max_workers
+        self.user_id = user_id
         self.results: List[ProductInfo] = []
-        logger.info(f"Парсер товаров инициализирован с {max_workers} воркерами")
+        logger.info(f"Парсер товаров инициализирован с макс {max_workers} воркерами для пользователя {user_id}")
     
     def parse_products(self, product_links: Dict[str, str]) -> List[ProductInfo]:
         # Сохраняем ссылки для использования в воркерах
@@ -224,14 +226,25 @@ class OzonProductParser:
             logger.error("Не найдено артикулов для парсинга")
             return []
         
-        optimal_workers = self._calculate_optimal_workers(len(articles))
-        
-        logger.info(f"Начало парсинга {len(articles)} товаров с {optimal_workers} воркерами")
-        
-        if optimal_workers == 1:
-            return self._parse_single_worker(articles)
+        # Получаем количество воркеров от менеджера ресурсов
+        if self.user_id:
+            allocated_workers = resource_manager.start_parsing_session(
+                self.user_id, 'products', len(articles)
+            )
         else:
-            return self._parse_multiple_workers(articles, optimal_workers)
+            allocated_workers = self._calculate_optimal_workers(len(articles))
+        
+        logger.info(f"Начало парсинга {len(articles)} товаров с {allocated_workers} воркерами для пользователя {self.user_id}")
+        
+        try:
+            if allocated_workers == 1:
+                return self._parse_single_worker(articles)
+            else:
+                return self._parse_multiple_workers(articles, allocated_workers)
+        finally:
+            # Завершаем сессию парсинга
+            if self.user_id:
+                resource_manager.finish_parsing_session(self.user_id)
     
     def _extract_article_from_url(self, url: str) -> str:
         try:
@@ -255,10 +268,8 @@ class OzonProductParser:
             return 2
         elif total_links <= 50:
             return 3
-        elif total_links <= 75:
-            return 4
         else:
-            return min(5, self.max_workers)
+            return min(5, self.max_workers)  # Максимум 5 воркеров
     
     def _parse_multiple_workers(self, articles: List[str], num_workers: int) -> List[ProductInfo]:
         chunks = self._distribute_articles(articles, num_workers)

@@ -133,7 +133,8 @@ class TelegramBotManager:
         
         keyboard = ReplyKeyboardMarkup(keyboard=[
             [KeyboardButton(text="🚀 Начать парсинг"), KeyboardButton(text="📊 Статус")],
-            [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="❓ Помощь")]
+            [KeyboardButton(text="🔧 Ресурсы"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="❓ Помощь")]
         ], resize_keyboard=True)
         
         welcome_text = (
@@ -154,11 +155,25 @@ class TelegramBotManager:
         
         status_text = f"📊 <b>Статус парсера</b>\n\n"
         status_text += f"🔄 Парсинг: {'🟢 Активен' if status['is_running'] else '🔴 Остановлен'}\n"
+        status_text += f"👥 Активных пользователей: {status.get('active_users_count', 0)}\n"
         status_text += f"🤖 Telegram бот: 🟢 Активен\n"
         status_text += f"📦 Макс. товаров: {status['settings']['max_products']}\n"
-        status_text += f"👥 Макс. воркеров: {status['settings']['max_workers']}\n"
+        status_text += f"⚙️ Макс. воркеров: {status['settings']['max_workers']}\n"
         
-        if status['last_results']:
+        # Показываем информацию о ресурсах
+        if status.get('total_active_users', 0) > 0:
+            status_text += f"\n🔧 <b>Ресурсы:</b>\n"
+            status_text += f"⚙️ Используется воркеров: {status.get('total_allocated_workers', 0)}/10\n"
+        
+        # Показываем результаты для текущего пользователя
+        user_id = str(message_or_query.from_user.id)
+        user_results = self.app_manager.get_user_results(user_id)
+        
+        if user_results:
+            status_text += f"\n📈 <b>Ваши результаты:</b>\n"
+            status_text += f"✅ Успешно: {user_results.get('successful_products', 0)}/{user_results.get('total_products', 0)}"
+        elif status['last_results']:
+            # Fallback для совместимости
             results = status['last_results']
             status_text += f"\n📈 <b>Последний результат:</b>\n"
             status_text += f"✅ Успешно: {results.get('successful_products', 0)}/{results.get('total_products', 0)}"
@@ -168,6 +183,41 @@ class TelegramBotManager:
         ], resize_keyboard=True)
         
         await message_or_query.reply(status_text, reply_markup=keyboard, parse_mode="HTML")
+    
+    async def _show_resources_status(self, message_or_query):
+        if not self._is_authorized_user(message_or_query):
+            return
+        
+        try:
+            from ..utils.resource_manager import resource_manager
+            status = resource_manager.get_status()
+            
+            status_text = "🔧 <b>Статус ресурсов</b>\n\n"
+            
+            if status['total_active_users'] == 0:
+                status_text += "😴 Нет активных пользователей\n"
+                status_text += f"📊 Доступно воркеров: {resource_manager.MAX_TOTAL_WORKERS}\n"
+            else:
+                status_text += f"👥 Активных пользователей: {status['total_active_users']}\n"
+                status_text += f"⚙️ Используется воркеров: {status['total_allocated_workers']}/{resource_manager.MAX_TOTAL_WORKERS}\n\n"
+                
+                for user_id, session_info in status['sessions'].items():
+                    user_display = f"User_{user_id[-4:]}" if len(user_id) > 4 else user_id
+                    status_text += f"👤 <b>{user_display}</b>\n"
+                    status_text += f"   📋 Этап: {session_info['stage']}\n"
+                    status_text += f"   ⚙️ Воркеров: {session_info['workers']}\n"
+                    status_text += f"   📈 Прогресс: {session_info['progress']}\n"
+                    status_text += f"   ⏱ Время: {session_info['duration']}\n\n"
+            
+            status_text += f"\n📋 <b>Лимиты:</b>\n"
+            status_text += f"• Макс воркеров всего: {resource_manager.MAX_TOTAL_WORKERS}\n"
+            status_text += f"• Макс на пользователя: {resource_manager.MAX_WORKERS_PER_USER}\n"
+            status_text += f"• Мин на пользователя: {resource_manager.MIN_WORKERS_PER_USER}\n"
+            
+        except Exception as e:
+            status_text = f"❌ Ошибка получения статуса ресурсов: {e}"
+        
+        await message_or_query.reply(status_text, parse_mode="HTML")
     
     async def _cmd_settings(self, message: Message, state: FSMContext):
         await self._show_settings(message, state)
@@ -238,6 +288,8 @@ class TelegramBotManager:
             await self._start_parsing_flow(query, state)
         elif data == "status":
             await self._show_status(query)
+        elif data == "resources":
+            await self._show_resources_status(query)
         elif data == "settings":
             await self._show_settings(query, state)
         elif data == "help":
@@ -379,9 +431,9 @@ class TelegramBotManager:
         selected_fields = user_settings.get('selected_fields', [])
         
         def start_parsing():
-            success = self.app_manager.start_parsing(url, selected_fields)
+            success = self.app_manager.start_parsing(url, selected_fields, self.parsing_user_id)
             if not success:
-                asyncio.run(self.send_message("❌ Ошибка запуска парсинга"))
+                self.send_message_sync("❌ Ошибка запуска парсинга")
         
         threading.Thread(target=start_parsing, daemon=True).start()
     
@@ -422,6 +474,8 @@ class TelegramBotManager:
             await self._start_parsing_flow_from_keyboard(message)
         elif text == "📊 Статус":
             await self._show_status(message)
+        elif text == "🔧 Ресурсы":
+            await self._show_resources_status(message)
         elif text == "⚙️ Настройки":
             state = FSMContext(storage=self.dp.storage, key=f"user:{message.from_user.id}")
             await self._show_settings(message, state)
@@ -537,6 +591,41 @@ class TelegramBotManager:
             
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения в Telegram: {e}")
+            return False
+    
+    def send_message_sync(self, text: str) -> bool:
+        """Thread-safe метод для отправки сообщений из других потоков"""
+        try:
+            if not self.is_running:
+                return False
+            
+            # Создаем новый event loop для этого потока
+            import asyncio
+            
+            async def _send():
+                success = True
+                for user_id in self.user_ids:
+                    try:
+                        # Создаем новый бот для отправки сообщения
+                        temp_bot = Bot(token=self.bot_token)
+                        await temp_bot.send_message(chat_id=user_id, text=text)
+                        await temp_bot.session.close()
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+                        success = False
+                return success
+            
+            # Запускаем в новом event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(_send())
+                return result
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            logger.error(f"Ошибка синхронной отправки сообщения: {e}")
             return False
     
 
