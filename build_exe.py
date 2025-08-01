@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Исправленный скрипт для сборки исполняемого файла OZONPARSER.exe с помощью PyInstaller
 """

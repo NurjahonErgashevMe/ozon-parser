@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class SeleniumManager:
     
-    def __init__(self, headless=False):
+    def __init__(self, headless=True):
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None

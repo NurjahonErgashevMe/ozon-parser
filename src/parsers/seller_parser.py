@@ -143,24 +143,130 @@ class SellerWorker:
         best_company, best_inn = "", ""
         best_score = 0
 
+        # Сначала собираем все textBlock'и с их данными
+        text_blocks = []
         for key, value in widget_states.items():
             if not key.startswith("textBlock-"):
                 continue
-
+            
             company, inn = self._extract_company_data(value)
+            if company or inn:  # Только если есть хоть какие-то данные
+                text_blocks.append({
+                    'key': key,
+                    'company': company,
+                    'inn': inn,
+                    'raw_data': value
+                })
 
-            score = 0
-            if company:
-                score += 10
-                if company.strip() != "О магазине":
-                    score += 1
-            if inn:
-                score += 10
-
+        # Применяем улучшенную логику скоринга
+        for block in text_blocks:
+            company = block['company']
+            inn = block['inn']
+            
+            score = self._calculate_text_block_score(company, inn, block['raw_data'])
+            
             if score > best_score:
                 best_company, best_inn, best_score = company, inn, score
 
+        # Если не нашли подходящий блок, попробуем альтернативную стратегию
+        if best_score <= 0:
+            return self._fallback_text_block_search(widget_states)
+            
         return best_company, best_inn
+
+    def _fallback_text_block_search(self, widget_states: Dict[str, str]) -> Tuple[str, str]:
+        """Альтернативная стратегия поиска названия компании"""
+        # Ищем textBlock, который находится рядом с cellList (обычно название компании идет перед статистикой)
+        text_blocks_with_positions = []
+        
+        for key, value in widget_states.items():
+            if key.startswith("textBlock-"):
+                # Извлекаем номер из ключа для определения позиции
+                match = re.search(r'textBlock-(\d+)', key)
+                if match:
+                    position = int(match.group(1))
+                    company, inn = self._extract_company_data(value)
+                    if company:  # Только если есть текст
+                        text_blocks_with_positions.append({
+                            'position': position,
+                            'company': company,
+                            'inn': inn,
+                            'key': key
+                        })
+        
+        # Сортируем по позиции и берем первый подходящий
+        text_blocks_with_positions.sort(key=lambda x: x['position'])
+        
+        for block in text_blocks_with_positions:
+            company = block['company']
+            # Проверяем, что это не служебный текст
+            if not any(phrase in company.lower() for phrase in ["о магазине", "оригинальные товары", "premium"]):
+                return company, block['inn']
+        
+        return "", ""
+
+    def _calculate_text_block_score(self, company: str, inn: str, raw_data: str) -> int:
+        """Улучшенная система скоринга для определения правильного textBlock"""
+        score = 0
+        
+        # Базовые очки за наличие данных
+        if company:
+            score += 10
+        if inn:
+            score += 15  # ИНН более важен для идентификации
+            
+        # Штрафы за нежелательные фразы
+        unwanted_phrases = [
+            "О магазине", "Оригинальные товары", "Premium магазин",
+            "Понятно", "Заказов", "Работает с Ozon", "Средняя оценка",
+            "Количество отзывов", "Это крупный магазин"
+        ]
+        
+        company_lower = company.lower() if company else ""
+        for phrase in unwanted_phrases:
+            if phrase.lower() in company_lower:
+                score -= 20  # Большой штраф за служебные фразы
+                
+        # Бонусы за признаки названия компании
+        if company:
+            # Проверяем на организационно-правовые формы
+            legal_forms = ["ООО", "ИП", "АО", "ЗАО", "ПАО", "Ltd", "LLC", "Inc", "Co"]
+            for form in legal_forms:
+                if form in company:
+                    score += 5
+                    
+            # Бонус за кавычки (часто в названиях компаний)
+            if '"' in company or "«" in company or "»" in company:
+                score += 3
+                
+            # Бонус за разумную длину названия компании (не слишком короткое, не слишком длинное)
+            if 5 <= len(company.strip()) <= 100:
+                score += 2
+                
+        # Проверяем структуру данных - если есть несколько textAtom, это может быть название + доп.инфо
+        try:
+            data = json.loads(raw_data)
+            if "body" in data and isinstance(data["body"], list):
+                text_atoms = [item for item in data["body"] if item.get("type") == "textAtom"]
+                
+                # Если есть 2 textAtom - это хороший признак (название + график работы)
+                if len(text_atoms) == 2:
+                    first_text = text_atoms[0].get("textAtom", {}).get("text", "")
+                    second_text = text_atoms[1].get("textAtom", {}).get("text", "")
+                    
+                    # Проверяем, что второй текст похож на график работы
+                    work_schedule_keywords = ["график", "работает", "согласно", "ozon", "время"]
+                    if any(keyword in second_text.lower() for keyword in work_schedule_keywords):
+                        score += 8  # Хороший признак правильного блока
+                        
+                    # Дополнительная проверка первого текста на название компании
+                    if first_text and not any(phrase.lower() in first_text.lower() for phrase in unwanted_phrases):
+                        score += 5
+                        
+        except:
+            pass  # Игнорируем ошибки парсинга JSON
+            
+        return score
 
     def _extract_company_data(self, text_block_data: str) -> Tuple[str, str]:
         try:
@@ -168,30 +274,90 @@ class SellerWorker:
             if "body" not in data or not isinstance(data["body"], list):
                 return "", ""
 
-            raw = ""
+            text_atoms = []
             for item in data["body"]:
                 if item.get("type") == "textAtom":
-                    raw += item["textAtom"]["text"] + "\n"
-            raw = raw.strip()
+                    text_atoms.append(item["textAtom"]["text"])
 
-            # 1. <br> split
-            for br_tag in ("<br>", "&lt;br&gt;"):
-                if br_tag in raw:
-                    parts = raw.split(br_tag, 1)
-                    company = html.unescape(parts[0].strip())
-                    inn_match = re.search(r"\d{10,15}", parts[1])
-                    inn = inn_match.group(0) if inn_match else ""
-                    return company, inn
+            if not text_atoms:
+                return "", ""
 
-            inn_match = re.search(r"(\d{10,15})$", raw)
-            if inn_match:
-                inn = inn_match.group(1)
-                company = raw[: inn_match.start()].strip()
-                return html.unescape(company), inn
+            # Если есть несколько textAtom, обрабатываем их отдельно
+            if len(text_atoms) >= 2:
+                # Первый textAtom обычно содержит название компании
+                first_text = text_atoms[0].strip()
+                
+                # Обрабатываем <br> теги в первом textAtom
+                company = self._extract_company_name_from_text(first_text)
+                
+                # Ищем ИНН во всех textAtom
+                inn = ""
+                for text in text_atoms:
+                    inn_match = re.search(r"\d{10,15}", text)
+                    if inn_match:
+                        inn = inn_match.group(0)
+                        break
+                
+                return company, inn
+            
+            # Если только один textAtom, используем улучшенную логику
+            raw = text_atoms[0].strip()
+            
+            # Сначала пробуем извлечь название компании с учетом <br>
+            company = self._extract_company_name_from_text(raw)
+            
+            # Ищем ИНН в оригинальном тексте
+            inn_match = re.search(r"\d{10,15}", raw)
+            inn = inn_match.group(0) if inn_match else ""
+            
+            return company, inn
 
-            return html.unescape(raw), ""
         except Exception:
             return "", ""
+
+    def _extract_company_name_from_text(self, text: str) -> str:
+        """Извлекает название компании из текста, обрабатывая <br> теги"""
+        if not text:
+            return ""
+        
+        # Список возможных вариантов <br> тегов
+        br_variants = ["<br>", "&lt;br&gt;", "<br/>", "&lt;br/&gt;", "<br />", "&lt;br /&gt;"]
+        
+        # Ищем первый <br> тег и берем текст до него
+        for br_tag in br_variants:
+            if br_tag in text:
+                company = text.split(br_tag, 1)[0].strip()
+                break
+        else:
+            # Если <br> тегов нет, проверяем на ИНН в конце строки
+            inn_match = re.search(r"(\d{10,15})$", text)
+            if inn_match:
+                company = text[:inn_match.start()].strip()
+                # Убираем возможные разделители
+                company = re.sub(r'[,\s]+$', '', company)
+            else:
+                company = text.strip()
+        
+        # Очищаем название компании от лишних символов
+        company = self._clean_company_name(company)
+        
+        return html.unescape(company)
+
+    def _clean_company_name(self, company: str) -> str:
+        """Очищает название компании от лишних символов и дублирования"""
+        if not company:
+            return ""
+        
+        # Убираем лишние пробелы
+        company = re.sub(r'\s+', ' ', company).strip()
+        
+        # Исправляем дублирование ООО (например "ООО ООО "РОБОТКОМП КОРП"" -> "ООО "РОБОТКОМП КОРП"")
+        company = re.sub(r'^(ООО|ИП|АО|ЗАО|ПАО)\s+(ООО|ИП|АО|ЗАО|ПАО)\s+', r'\1 ', company)
+        
+        # Убираем возможные разделители в конце
+        company = re.sub(r'[,\s]+$', '', company)
+        
+        return company
 
     def _extract_cell_list_data(self, cell_list_data: str) -> Dict[str, str]:
         result = {
