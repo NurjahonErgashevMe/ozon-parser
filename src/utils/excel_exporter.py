@@ -3,6 +3,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from pathlib import Path
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ class ExcelExporter:
                 'original_price': ('Старая цена', lambda p: p.get('original_price', 0)),
                 'product_url': ('Ссылка товара', lambda p: p.get('product_url', '')),
                 'image_url': ('Изображение', lambda p: p.get('image_url', '')),
+                'description': ('Описание', lambda p: p.get('description', '')),
+                'characteristics': ('Характеристики', lambda p: self._format_characteristics(p.get('characteristics', {}))),
                 'orders_count': ('Заказов', lambda p: p.get('seller', {}).get('orders_count', '')),
                 'reviews_count': ('Отзывов', lambda p: p.get('seller', {}).get('reviews_count', '')),
                 'average_rating': ('Рейтинг', lambda p: p.get('seller', {}).get('average_rating', '')),
@@ -41,8 +44,8 @@ class ExcelExporter:
                 headers = [field_mapping[field][0] for field in selected_fields if field in field_mapping]
                 field_extractors = [field_mapping[field][1] for field in selected_fields if field in field_mapping]
             else:
-                # По умолчанию: название товара, название компании, ссылка на товар и изображение
-                default_fields = ['name', 'company_name', 'product_url', 'image_url']
+                # По умолчанию: название товара, название компании, ссылка на товар, изображение и описание
+                default_fields = ['name', 'company_name', 'product_url', 'image_url', 'description']
                 headers = [field_mapping[field][0] for field in default_fields]
                 field_extractors = [field_mapping[field][1] for field in default_fields]
             
@@ -85,7 +88,8 @@ class ExcelExporter:
             # Ширина колонок (адаптивная)
             default_widths = {'Артикул': 12, 'Название товара': 40, 'Продавец': 25, 'Название компании': 30, 'ИНН': 15, 
                             'Цена карты': 12, 'Цена': 12, 'Старая цена': 12, 'Ссылка товара': 50, 
-                            'Изображение': 50, 'Заказов': 12, 'Отзывов': 12, 'Рейтинг': 12, 'Работает с': 15}
+                            'Изображение': 50, 'Описание': 50, 'Характеристики': 50, 'Заказов': 12, 
+                            'Отзывов': 12, 'Рейтинг': 12, 'Работает с': 15}
             
             for col, header in enumerate(headers, 1):
                 width = default_widths.get(header, 15)
@@ -107,3 +111,14 @@ class ExcelExporter:
         except Exception as e:
             logger.error(f"Ошибка экспорта в Excel: {e}")
             return False
+    
+    def _format_characteristics(self, characteristics: Dict[str, str]) -> str:
+        """Форматирует характеристики для отображения в ячейке Excel"""
+        if not characteristics:
+            return ""
+        
+        formatted_chars = []
+        for name, value in characteristics.items():
+            formatted_chars.append(f"{name}: {value}")
+        
+        return "\n".join(formatted_chars)

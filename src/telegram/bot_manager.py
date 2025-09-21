@@ -31,6 +31,8 @@ FIELD_NAMES = {
     'original_price': 'Старая цена',
     'product_url': 'Ссылка на товар',
     'image_url': 'Ссылка на изображение',
+    'description': 'Описание товара',
+    'characteristics': 'Характеристики товара',
     'orders_count': 'Количество заказов',
     'reviews_count': 'Количество отзывов',
     'average_rating': 'Рейтинг',
@@ -41,7 +43,19 @@ class TelegramBotManager:
     
     def __init__(self, bot_token: str, user_ids: list, app_manager: 'AppManager'):
         self.bot_token = bot_token
-        self.user_ids = user_ids  # Список разрешенных User ID
+        # Гарантируем, что user_ids - это список строк
+        if isinstance(user_ids, int):
+            self.user_ids = [str(user_ids)]
+        elif isinstance(user_ids, str):
+            # Разделяем по запятой, если есть несколько ID
+            self.user_ids = [uid.strip() for uid in user_ids.split(',') if uid.strip()]
+        elif isinstance(user_ids, list):
+            # Преобразуем все элементы в строки
+            self.user_ids = [str(uid) for uid in user_ids]
+        else:
+            # На всякий случай, если пришел неизвестный тип
+            self.user_ids = []
+            logger.warning(f"Неизвестный тип user_ids: {type(user_ids)}, преобразован в пустой список")
         self.app_manager = app_manager
         self.bot = Bot(token=bot_token)
         self.dp = Dispatcher()
@@ -82,16 +96,24 @@ class TelegramBotManager:
     def _send_startup_notification(self):
         """Отправляет уведомление о запуске в отдельном потоке"""
         try:
-            # Создаем новый бот для отправки сообщения
-            # Это избегает проблем с контекстом asyncio
+            # Проверяем, что у нас есть список ID пользователей
+            if not self.user_ids:
+                logger.warning("Список user_ids пуст, уведомление о запуске не будет отправлено")
+                return
+
             temp_bot = Bot(token=self.bot_token)
             
             async def send_and_close():
                 try:
-                    # Отправляем уведомление всем разрешенным пользователям
                     for user_id in self.user_ids:
-                        await temp_bot.send_message(chat_id=user_id, 
-                                                text="🤖 Ozon Parser бот запущен и готов к работе!")
+                        try:
+                            await temp_bot.send_message(
+                                chat_id=user_id, 
+                                text="🤖 Ozon Parser бот запущен и готов к работе!"
+                            )
+                            logger.info(f"Уведомление о запуске отправлено пользователю {user_id}")
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
                 finally:
                     await temp_bot.session.close()
             

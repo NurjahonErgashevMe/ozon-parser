@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 from .config_loader import read_config, write_config
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ class Database:
             }
         else:
             # Настройки по умолчанию
-            default_fields = ['name', 'company_name', 'product_url', 'image_url']
+            default_fields = ['name', 'company_name', 'product_url', 'image_url', 'description']
             self.save_user_settings(user_id, default_fields, default_fields, 500)
             return {
                 'selected_fields': default_fields,

@@ -86,6 +86,7 @@ class OzonLinkParser:
         seen_urls = set()
         scroll_num = 0
         no_new_items_count = 0
+        max_no_new_items = 3  # Максимальное количество попыток без новых товаров
 
         while len(self.collected_links) < self.max_products:
             scroll_num += 1
@@ -102,7 +103,9 @@ class OzonLinkParser:
 
             if new_count == 0:
                 no_new_items_count += 1
-                if no_new_items_count >= 3:
+                logger.info(f"Нет новых товаров, попытка {no_new_items_count}/{max_no_new_items}")
+                if no_new_items_count >= max_no_new_items:
+                    logger.info("Достигнут лимит попыток без новых товаров, завершаем сбор ссылок")
                     break
             else:
                 no_new_items_count = 0

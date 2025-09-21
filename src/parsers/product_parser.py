@@ -1,11 +1,10 @@
-
 import logging
 import json
 import re
 import time
 import concurrent.futures
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from typing import List, Dict, Optional
+from dataclasses import dataclass, field
 from ..utils.selenium_manager import SeleniumManager
 from ..utils.resource_manager import resource_manager
 
@@ -23,6 +22,8 @@ class ProductInfo:
     original_price: int = 0
     seller_id: str = ""
     seller_link: str = ""
+    description: str = ""  # Новое поле для описания товара
+    characteristics: Dict[str, str] = field(default_factory=dict)  # Новое поле для характеристик товара
     success: bool = False
     error: str = ""
 
@@ -159,6 +160,16 @@ class ProductWorker:
                 product_info.price = self._extract_price_number(price_data.get('price', ''))
                 product_info.original_price = self._extract_price_number(price_data.get('originalPrice', ''))
             
+            # Ищем описание товара в webDescription
+            description_data = self._find_description_data(widget_states)
+            if description_data:
+                product_info.description = self._extract_description(description_data)
+            
+            # Ищем характеристики товара в webCharacteristics
+            characteristics_data = self._find_characteristics_data(widget_states)
+            if characteristics_data:
+                product_info.characteristics = self._extract_characteristics(characteristics_data)
+            
             # Проверяем, что получили основную информацию
             if product_info.name or product_info.card_price:
                 product_info.success = True
@@ -189,6 +200,61 @@ class ProductWorker:
                 except json.JSONDecodeError:
                     continue
         return None
+    
+    def _find_description_data(self, widget_states: Dict) -> Optional[Dict]:
+        for key, value in widget_states.items():
+            if key.startswith('webDescription-') and isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    continue
+        return None
+    
+    def _find_characteristics_data(self, widget_states: Dict) -> Optional[Dict]:
+        for key, value in widget_states.items():
+            if key.startswith('webCharacteristics-') and isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    continue
+        return None
+    
+    def _extract_description(self, description_data: Dict) -> str:
+        try:
+            content = description_data.get('content', [])
+            description_parts = []
+            
+            for item in content:
+                if item.get('type') == 'text':
+                    text = item.get('text', '')
+                    if text:
+                        description_parts.append(text)
+            
+            return ' '.join(description_parts).strip()
+        except Exception as e:
+            logger.warning(f"Ошибка извлечения описания: {e}")
+            return ""
+    
+    def _extract_characteristics(self, characteristics_data: Dict) -> Dict[str, str]:
+        try:
+            characteristics = {}
+            
+            # Извлекаем характеристики из разных возможных форматов
+            if 'characteristics' in characteristics_data:
+                chars_list = characteristics_data['characteristics']
+                for char_group in chars_list:
+                    if 'title' in char_group and 'characteristics' in char_group:
+                        group_title = char_group['title']
+                        for char in char_group['characteristics']:
+                            if 'name' in char and 'value' in char:
+                                char_name = f"{group_title}: {char['name']}"
+                                char_value = char['value']
+                                characteristics[char_name] = char_value
+            
+            return characteristics
+        except Exception as e:
+            logger.warning(f"Ошибка извлечения характеристик: {e}")
+            return {}
     
     def _extract_price_number(self, price_str: str) -> int:
         if not price_str:
