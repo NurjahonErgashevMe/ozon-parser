@@ -273,7 +273,10 @@ class TelegramBotManager:
             [KeyboardButton(text="🏠 Главное меню")]
         ], resize_keyboard=True)
         
-        await message.reply(help_text, reply_markup=keyboard, parse_mode="HTML")
+        if isinstance(message_or_query, CallbackQuery):
+            await message_or_query.message.reply(help_text, reply_markup=keyboard, parse_mode="HTML")
+        else:
+            await message_or_query.reply(help_text, reply_markup=keyboard, parse_mode="HTML")
     
     async def _handle_callback(self, query: CallbackQuery, state: FSMContext):
         if not self._is_authorized_user(query):
