@@ -132,6 +132,10 @@ class ProductWorker:
                 return ProductInfo(article=article, error="Отсутствует widgetStates в ответе")
             
             widget_states = data['widgetStates']
+            # Добавляем parent для seo, если seo в data
+            if 'seo' in data:
+                widget_states['parent'] = data
+            
             product_info = ProductInfo(article=article)
             
             # Ищем информацию о товаре в webStickyProducts
@@ -160,15 +164,21 @@ class ProductWorker:
                 product_info.price = self._extract_price_number(price_data.get('price', ''))
                 product_info.original_price = self._extract_price_number(price_data.get('originalPrice', ''))
             
-            # Ищем описание товара в webDescription
+            # Ищем описание товара из SEO
             description_data = self._find_description_data(widget_states)
             if description_data:
                 product_info.description = self._extract_description(description_data)
+                logger.info(f"Для товара {article} найдено описание длиной {len(product_info.description)} символов")
+            else:
+                logger.warning(f"Для товара {article} описание не найдено")
             
-            # Ищем характеристики товара в webCharacteristics
+            # Ищем характеристики товара из webShortCharacteristics
             characteristics_data = self._find_characteristics_data(widget_states)
             if characteristics_data:
                 product_info.characteristics = self._extract_characteristics(characteristics_data)
+                logger.info(f"Для товара {article} найдено {len(product_info.characteristics)} характеристик")
+            else:
+                logger.warning(f"Для товара {article} характеристики не найдены")
             
             # Проверяем, что получили основную информацию
             if product_info.name or product_info.card_price:
@@ -202,35 +212,66 @@ class ProductWorker:
         return None
     
     def _find_description_data(self, widget_states: Dict) -> Optional[Dict]:
-        for key, value in widget_states.items():
-            if key.startswith('webDescription-') and isinstance(value, str):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    continue
+        # Ищем описание в SEO скрипте по точному пути
+        with open("TEST.txt", "w", encoding="utf8") as fff:
+            fff.write(str(widget_states) + str(widget_states.get('parent', {})) + str(widget_states['parent']['seo']))
+        try:
+            if 'seo' in widget_states.get('parent', {}):
+                seo_data = widget_states['parent']['seo']
+                if 'script' in seo_data and len(seo_data['script']) > 0:
+                    script_item = seo_data['script'][0]
+                    if 'innerHTML' in script_item:
+                        # Парсим innerHTML как JSON
+                        script_json_str = script_item['innerHTML']
+                        script_data = json.loads(script_json_str)
+                        
+                        # Проверяем, что это Product с description
+                        if script_data.get('@type') == 'Product' and 'description' in script_data:
+                            description_text = script_data['description']
+                            # Возвращаем в формате, который понимает _extract_description
+                            return {'body': [{'type': 'textAtom', 'textAtom': {'text': description_text}}]}
+                            
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            logger.debug(f"Ошибка при поиске описания в SEO: {e}")
+        
         return None
     
     def _find_characteristics_data(self, widget_states: Dict) -> Optional[Dict]:
-        for key, value in widget_states.items():
-            if key.startswith('webCharacteristics-') and isinstance(value, str):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    continue
-        return None
+        # Ищем характеристики в webShortCharacteristics по точному пути
+        try:
+            for key, value in widget_states.items():
+                if key.startswith('webShortCharacteristics-') and isinstance(value, str):
+                    # Парсим строку как JSON
+                    data = json.loads(value)
+                    
+                    # Проверяем наличие characteristics
+                    if 'characteristics' in data and isinstance(data['characteristics'], list):
+                        logger.debug(f"Найдены характеристики в {key}: {len(data['characteristics'])} элементов")
+                        return data
+            
+            logger.warning("Характеристики не найдены в webShortCharacteristics")
+            return None
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Ошибка при поиске характеристик: {e}")
+            return None
     
     def _extract_description(self, description_data: Dict) -> str:
         try:
-            content = description_data.get('content', [])
-            description_parts = []
+            # Если данные из SEO скрипта
+            if 'body' in description_data:
+                content = description_data.get('body', [])
+                description_parts = []
+                for item in content:
+                    if item.get('type') == 'textAtom' and 'textAtom' in item:
+                        text = item['textAtom'].get('text', '')
+                        if text and len(text) > 20:  # Исключаем короткие тексты
+                            description_parts.append(text.strip())
+                result = ' '.join(description_parts).strip()
+                logger.info(f"Извлечено описание: {result[:100]}...")
+                return result
             
-            for item in content:
-                if item.get('type') == 'text':
-                    text = item.get('text', '')
-                    if text:
-                        description_parts.append(text)
-            
-            return ' '.join(description_parts).strip()
+            return ""
         except Exception as e:
             logger.warning(f"Ошибка извлечения описания: {e}")
             return ""
@@ -239,19 +280,38 @@ class ProductWorker:
         try:
             characteristics = {}
             
-            # Извлекаем характеристики из разных возможных форматов
-            if 'characteristics' in characteristics_data:
-                chars_list = characteristics_data['characteristics']
-                for char_group in chars_list:
-                    if 'title' in char_group and 'characteristics' in char_group:
-                        group_title = char_group['title']
-                        for char in char_group['characteristics']:
-                            if 'name' in char and 'value' in char:
-                                char_name = f"{group_title}: {char['name']}"
-                                char_value = char['value']
-                                characteristics[char_name] = char_value
+            # Извлекаем список характеристик
+            chars_list = characteristics_data.get('characteristics', [])
             
+            for char_item in chars_list:
+                # Достаем название характеристики
+                title_data = char_item.get('title', {})
+                title_text_rs = title_data.get('textRs', [])
+                
+                if len(title_text_rs) > 0:
+                    char_name = title_text_rs[0].get('content', '').strip()
+                else:
+                    char_name = "Неизвестная характеристика"
+                
+                # Достаем значения
+                values_list = char_item.get('values', [])
+                values_text = []
+                
+                for value_item in values_list:
+                    value_text = value_item.get('text', '').strip()
+                    if value_text:
+                        values_text.append(value_text)
+                
+                # Сохраняем как строку через запятую
+                char_value = ', '.join(values_text)
+                
+                if char_name and char_value:
+                    characteristics[char_name] = char_value
+                    logger.debug(f"Характеристика: {char_name} = {char_value}")
+            
+            logger.info(f"Извлечено {len(characteristics)} характеристик")
             return characteristics
+            
         except Exception as e:
             logger.warning(f"Ошибка извлечения характеристик: {e}")
             return {}

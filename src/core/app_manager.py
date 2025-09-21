@@ -2,7 +2,7 @@ import logging
 import threading
 import asyncio
 import time
-from typing import Dict, Any, List, Optional
+from typing import Optional
 from ..config.settings import Settings
 from ..parsers.link_parser import OzonLinkParser
 from ..parsers.product_parser import OzonProductParser
@@ -251,6 +251,8 @@ class AppManager:
                     'price': product.price,
                     'original_price': product.original_price,
                     'product_url': product_url,
+                    'description': product.description,
+                    'characteristics': product.characteristics,
                     'success': product.success,
                     'error': product.error
                 })
@@ -312,15 +314,18 @@ class AppManager:
                     'price': product.price,
                     'original_price': product.original_price,
                     'product_url': product_url,
+                    'description': product.description,
+                    'characteristics': product.characteristics,
                     'success': product.success,
                     'error': product.error
                 })
             
             if exporter.export_results(export_data, selected_fields):
-                self._send_files_to_telegram(str(exporter.filepath), user_id)
+                # Отправляем оба файла: Excel и CSV
+                self._send_files_to_telegram(str(exporter.filepath), str(exporter.csv_filepath), user_id)
             
         except Exception as e:
-            logger.error(f"Ошибка экспорта в Excel: {e}")
+            logger.error(f"Ошибка экспорта в Excel/CSV: {e}")
     
     def start_telegram_bot(self, bot_token: str, user_ids) -> bool:
         try:
@@ -377,10 +382,10 @@ class AppManager:
     def _send_report_to_telegram(self, user_id: str = None):
         self._send_via_temp_bot(report_only=True, target_user_id=user_id)
     
-    def _send_files_to_telegram(self, excel_path: str, user_id: str = None):
-        self._send_via_temp_bot(excel_path=excel_path, target_user_id=user_id)
+    def _send_files_to_telegram(self, excel_path: str, csv_path: str, user_id: str = None):
+        self._send_via_temp_bot(excel_path=excel_path, csv_path=csv_path, target_user_id=user_id)
     
-    def _send_via_temp_bot(self, excel_path: str = None, report_only: bool = False, target_user_id: str = None):
+    def _send_via_temp_bot(self, excel_path: str = None, csv_path: str = None, report_only: bool = False, target_user_id: str = None):
         try:
             from ..utils.config_loader import load_telegram_config
             
@@ -449,18 +454,30 @@ class AppManager:
                         if excel_path:
                             caption = (
                                 "🎉 <b>Парсинг успешно завершен!</b>\n\n"
-                                "📊 <b>Ваш Excel файл готов!</b>\n"
+                                "📊 <b>Ваши файлы готовы!</b>\n"
                                 "💎 Данные отформатированы и готовы к использованию\n\n"
-                                "📥 Скачайте файл выше ⬆️"
+                                "📥 Скачайте файлы ниже ⬇️"
                             )
                             
-                            document = FSInputFile(excel_path)
+                            # Отправляем Excel файл
+                            document_excel = FSInputFile(excel_path)
                             await temp_bot.send_document(
                                 chat_id=target_user,
-                                document=document,
+                                document=document_excel,
                                 caption=caption,
                                 parse_mode="HTML"
                             )
+                            
+                            # Отправляем CSV файл с отдельным сообщением
+                            if csv_path:
+                                csv_caption = "📄 <b>CSV версия данных</b>\n\nДля импорта в другие системы"
+                                document_csv = FSInputFile(csv_path)
+                                await temp_bot.send_document(
+                                    chat_id=target_user,
+                                    document=document_csv,
+                                    caption=csv_caption,
+                                    parse_mode="HTML"
+                                )
                     
                     if excel_path:
                         await asyncio.sleep(10)

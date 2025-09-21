@@ -1,5 +1,6 @@
 import logging
 import openpyxl
+import csv
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from pathlib import Path
@@ -12,8 +13,27 @@ class ExcelExporter:
         self.output_dir = output_dir
         self.filename = filename
         self.filepath = output_dir / f"{filename}.xlsx"
+        self.csv_filepath = output_dir / f"{filename}.csv"
     
     def export_results(self, data: dict, selected_fields: list = None) -> bool:
+        try:
+            # Экспорт в Excel
+            excel_success = self._export_to_excel(data, selected_fields)
+            # Экспорт в CSV
+            csv_success = self._export_to_csv(data, selected_fields)
+            
+            if excel_success and csv_success:
+                logger.info(f"Excel и CSV файлы сохранены: {self.filepath} и {self.csv_filepath}")
+                return True
+            else:
+                logger.error(f"Ошибка при сохранении файлов: Excel={excel_success}, CSV={csv_success}")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Ошибка экспорта в Excel/CSV: {e}")
+            return False
+    
+    def _export_to_excel(self, data: dict, selected_fields: list = None) -> bool:
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -112,8 +132,60 @@ class ExcelExporter:
             logger.error(f"Ошибка экспорта в Excel: {e}")
             return False
     
+    def _export_to_csv(self, data: dict, selected_fields: list = None) -> bool:
+        try:
+            # Маппинг полей (такое же, как для Excel)
+            field_mapping = {
+                'article': ('Артикул', lambda p: p.get('article', '')),
+                'name': ('Название товара', lambda p: p.get('name', '')),
+                'seller_name': ('Продавец', lambda p: p.get('seller', {}).get('name', '')),
+                'company_name': ('Название компании', lambda p: p.get('seller', {}).get('company_name', '')),
+                'inn': ('ИНН', lambda p: p.get('seller', {}).get('inn', '')),
+                'card_price': ('Цена карты', lambda p: p.get('card_price', 0)),
+                'price': ('Цена', lambda p: p.get('price', 0)),
+                'original_price': ('Старая цена', lambda p: p.get('original_price', 0)),
+                'product_url': ('Ссылка товара', lambda p: p.get('product_url', '')),
+                'image_url': ('Изображение', lambda p: p.get('image_url', '')),
+                'description': ('Описание', lambda p: p.get('description', '')),
+                'characteristics': ('Характеристики', lambda p: self._format_characteristics(p.get('characteristics', {}))),
+                'orders_count': ('Заказов', lambda p: p.get('seller', {}).get('orders_count', '')),
+                'reviews_count': ('Отзывов', lambda p: p.get('seller', {}).get('reviews_count', '')),
+                'average_rating': ('Рейтинг', lambda p: p.get('seller', {}).get('average_rating', '')),
+                'working_time': ('Работает с', lambda p: p.get('seller', {}).get('working_time', ''))
+            }
+            
+            # Используем выбранные поля или все по умолчанию
+            if selected_fields:
+                headers = [field_mapping[field][0] for field in selected_fields if field in field_mapping]
+                field_extractors = [field_mapping[field][1] for field in selected_fields if field in field_mapping]
+            else:
+                # По умолчанию: название товара, название компании, ссылка на товар, изображение и описание
+                default_fields = ['name', 'company_name', 'product_url', 'image_url', 'description']
+                headers = [field_mapping[field][0] for field in default_fields]
+                field_extractors = [field_mapping[field][1] for field in default_fields]
+            
+            # Подготовка данных для CSV
+            csv_data = []
+            csv_data.append(headers)  # Заголовки
+            
+            for product in data.get('products', []):
+                row_data = [extractor(product) for extractor in field_extractors]
+                csv_data.append(row_data)
+            
+            # Запись в CSV файл
+            with open(self.csv_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerows(csv_data)
+            
+            logger.info(f"CSV файл сохранен: {self.csv_filepath}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка экспорта в CSV: {e}")
+            return False
+    
     def _format_characteristics(self, characteristics: Dict[str, str]) -> str:
-        """Форматирует характеристики для отображения в ячейке Excel"""
+        """Форматирует характеристики для отображения в ячейке Excel/CSV"""
         if not characteristics:
             return ""
         
