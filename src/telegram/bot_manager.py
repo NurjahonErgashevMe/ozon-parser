@@ -96,21 +96,44 @@ class TelegramBotManager:
                     await temp_bot.session.close()
             
             # Запускаем в новом цикле событий
-            asyncio.run(send_and_close())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(send_and_close())
+            finally:
+                loop.close()
             
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления о запуске: {e}")
     
     def _run_bot(self):
+        loop = None
         try:
-            self.is_running = True
+            # Настройка политики для Windows
+            import sys
+            if sys.platform == 'win32':
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+            # Создаем и устанавливаем новый event loop для этого потока
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            asyncio.run(self.dp.start_polling(self.bot))
+            self.is_running = True
+            
+            # Запускаем polling в этом loop с отключенной обработкой сигналов
+            # handle_signals=False критически важен для запуска в отдельном потоке
+            loop.run_until_complete(self.dp.start_polling(self.bot, handle_signals=False))
             
         except Exception as e:
             logger.error(f"Ошибка работы Telegram бота: {e}")
             self.is_running = False
+        finally:
+            # Закрываем loop при выходе
+            if loop and not loop.is_closed():
+                try:
+                    loop.close()
+                except Exception as e:
+                    logger.error(f"Ошибка закрытия event loop: {e}")
     
     def _register_handlers(self):
         self.dp.message.register(self._cmd_start, Command('start'))
