@@ -34,7 +34,7 @@ class MainWindow:
         """Запуск GUI"""
         try:
             self.root = tk.Tk()
-            self.root.title("🤖 Telegram Bot Manager v1.0")
+            self.root.title("🤖 Telegram Bot Manager v1.1.0")
             self.root.geometry("900x700")
             self.root.minsize(800, 600)
             
