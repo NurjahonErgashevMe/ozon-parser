@@ -66,21 +66,61 @@ class OzonLinkParser:
                 resource_manager.finish_parsing_session(self.user_id)
     
     def _load_page(self) -> bool:
-        try:
-            if not self.selenium_manager.navigate_to_url(self.category_url):
+        max_driver_retries = 3  # Максимум 3 драйвера
+        
+        for driver_attempt in range(max_driver_retries):
+            try:
+                logger.info(f"Попытка загрузки страницы с драйвером #{driver_attempt + 1}/{max_driver_retries}")
+                
+                # Если это не первая попытка - пересоздаем драйвер
+                if driver_attempt > 0:
+                    logger.info(f"Пересоздание драйвера после блокировки (драйвер #{driver_attempt + 1})")
+                    self.selenium_manager.close()
+                    time.sleep(3)  # Пауза перед созданием нового драйвера
+                    self.driver = self.selenium_manager.create_driver()
+                
+                # Пытаемся перейти на URL (внутри 3 попытки перезагрузки страницы)
+                if not self.selenium_manager.navigate_to_url(self.category_url):
+                    if driver_attempt < max_driver_retries - 1:
+                        logger.warning(f"Не удалось загрузить страницу с драйвером #{driver_attempt + 1}, попытка с новым драйвером...")
+                        continue
+                    return False
+                
+                # Ожидаем контейнер товаров
+                WebDriverWait(self.driver, 60).until(
+                    EC.presence_of_element_located((By.ID, "contentScrollPaginator"))
+                )
+                
+                logger.info(f"✓ Страница успешно загружена с драйвером #{driver_attempt + 1}")
+                return True
+                
+            except TimeoutException:
+                logger.error(f"Контейнер товаров не найден (драйвер #{driver_attempt + 1})")
+                if driver_attempt < max_driver_retries - 1:
+                    logger.info("Попытка с новым драйвером...")
+                    continue
                 return False
-            
-            WebDriverWait(self.driver, 60).until(
-                EC.presence_of_element_located((By.ID, "contentScrollPaginator"))
-            )
-            return True
-            
-        except TimeoutException:
-            logger.error("Контейнер товаров не найден")
-            return False
-        except Exception as e:
-            logger.error(f"Ошибка загрузки страницы: {e}")
-            return False
+                
+            except Exception as e:
+                error_msg = str(e)
+                
+                # Если это ошибка блокировки после 3 попыток перезагрузки страницы
+                if "Access blocked" in error_msg:
+                    if driver_attempt < max_driver_retries - 1:
+                        logger.warning(f"Драйвер #{driver_attempt + 1} заблокирован после 3 попыток перезагрузки, пробуем новый драйвер...")
+                        continue  # Создадим новый драйвер на следующей итерации
+                    else:
+                        logger.error(f"Все {max_driver_retries} драйверов были заблокированы. Общее количество попыток: {max_driver_retries * 3}")
+                        return False
+                else:
+                    logger.error(f"Ошибка загрузки страницы (драйвер #{driver_attempt + 1}): {e}")
+                    if driver_attempt < max_driver_retries - 1:
+                        logger.info("Попытка с новым драйвером...")
+                        continue
+                    return False
+        
+        logger.error(f"Не удалось загрузить страницу после {max_driver_retries} драйверов")
+        return False
     
     def _collect_links(self):
         seen_urls = set()
