@@ -66,7 +66,7 @@ class SellerWorker:
 
         for attempt in range(max_retries):
             try:
-                api_url = f"https://www.ozon.ru/api/composer-api.bx/page/json/v2?url=/modal/shop-in-shop-info?seller_id={seller_id}&__rr=1"
+                api_url = f"https://www.ozon.ru/api/entrypoint-api.bx/page/json/v2?url=/modal/shop-in-shop-info?seller_id={seller_id}&__rr=1"
 
                 if not self.selenium_manager.navigate_to_url(api_url):
                     if attempt < max_retries - 1:
@@ -428,15 +428,10 @@ class OzonSellerParser:
 
         logger.info(f"Начало парсинга {len(unique_seller_ids)} продавцов с {allocated_workers} воркерами для пользователя {self.user_id}")
 
-        try:
-            if allocated_workers == 1:
-                return self._parse_single_worker(unique_seller_ids)
-            else:
-                return self._parse_multiple_workers(unique_seller_ids, allocated_workers)
-        finally:
-            # Завершаем сессию парсинга
-            if self.user_id:
-                resource_manager.finish_parsing_session(self.user_id)
+        if allocated_workers == 1:
+            return self._parse_single_worker(unique_seller_ids)
+        else:
+            return self._parse_multiple_workers(unique_seller_ids, allocated_workers)
 
     def _parse_single_worker(self, seller_ids: List[str]) -> List[SellerInfo]:
         worker = SellerWorker(1)

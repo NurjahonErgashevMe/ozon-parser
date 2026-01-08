@@ -147,10 +147,27 @@ class ProductWorker:
                 # Извлекаем ID и ссылку продавца
                 seller_link = seller_info.get('link', '')
                 if seller_link:
-                    seller_id = re.search(r'/seller/(\d+)/', seller_link)
+                    # Ищем seller_id в разных форматах: /seller/123456/ или /seller/name-123456/
+                    seller_id = re.search(r'/seller/(?:[^/]*-)?(\d+)/?', seller_link)
                     if seller_id:
                         product_info.seller_id = seller_id.group(1)
                         product_info.seller_link = f"https://ozon.ru/seller/{seller_id.group(1)}"
+                        logger.debug(f"Найден seller_id из sticky_product_data: {product_info.seller_id}")
+                    else:
+                        logger.debug(f"Не удалось извлечь seller_id из ссылки: {seller_link}")
+            
+            # Резервный поиск seller_id во всём JSON, если не нашли в sticky_product_data
+            if not product_info.seller_id:
+                raw_data = json.dumps(widget_states)
+                # Ищем все возможные варианты seller ссылок
+                seller_matches = re.findall(r'/seller/(?:[^/]*-)?(\d+)/?', raw_data)
+                if seller_matches:
+                    # Берём первый найденный seller_id
+                    product_info.seller_id = seller_matches[0]
+                    product_info.seller_link = f"https://ozon.ru/seller/{seller_matches[0]}"
+                    logger.info(f"Найден seller_id через резервный поиск для товара {article}: {product_info.seller_id} (всего найдено: {len(seller_matches)})")
+                else:
+                    logger.warning(f"seller_id не найден ни в sticky_product_data, ни в резервном поиске для товара {article}")
             
             # Ищем информацию о ценах в webPrice
             price_data = self._find_price_data(widget_states)
@@ -236,15 +253,10 @@ class OzonProductParser:
         
         logger.info(f"Начало парсинга {len(articles)} товаров с {allocated_workers} воркерами для пользователя {self.user_id}")
         
-        try:
-            if allocated_workers == 1:
-                return self._parse_single_worker(articles)
-            else:
-                return self._parse_multiple_workers(articles, allocated_workers)
-        finally:
-            # Завершаем сессию парсинга
-            if self.user_id:
-                resource_manager.finish_parsing_session(self.user_id)
+        if allocated_workers == 1:
+            return self._parse_single_worker(articles)
+        else:
+            return self._parse_multiple_workers(articles, allocated_workers)
     
     def _extract_article_from_url(self, url: str) -> str:
         try:

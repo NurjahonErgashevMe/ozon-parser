@@ -98,92 +98,131 @@ class AppManager:
                 self.is_running = False
     
     def _parsing_task(self, category_url: str, selected_fields: list = None, user_id: str = None):
+        # Поля, которые требуют парсинга селлера
+        SELLER_FIELDS = {'inn', 'company_name', 'seller_name', 'orders_count', 'reviews_count', 'average_rating', 'working_time'}
+        
+        # Проверяем, нужен ли парсинг селлеров
+        needs_seller_parsing = False
+        if selected_fields:
+            needs_seller_parsing = any(field in SELLER_FIELDS for field in selected_fields)
+        else:
+            # Если поля не указаны, по умолчанию парсим селлеров
+            needs_seller_parsing = True
+        
         start_time = time.time()
-        link_parser = OzonLinkParser(category_url, self.settings.MAX_PRODUCTS, user_id)
         
-        success, product_links = link_parser.start_parsing()
-        
-        if self.stop_event.is_set():
-            return
-        
-        if not success or not product_links:
-            logger.error("Не удалось собрать ссылки товаров")
-            return
-        
-        if self.stop_event.is_set():
-            return
-        
-        product_parser = OzonProductParser(self.settings.MAX_WORKERS, user_id)
-        product_results = product_parser.parse_products(product_links)
-        
-        # Принудительно закрываем все воркеры продуктов перед началом парсинга продавцов
-        product_parser.cleanup()
-        
-        if self.stop_event.is_set():
-            return
-        
-        seller_ids = []
-        for product in product_results:
-            if product.seller_id and product.success:
-                seller_ids.append(product.seller_id)
-        
-        unique_seller_ids = list(set(seller_ids))
-        
-        seller_results = []
-        if unique_seller_ids:
-            logger.info(f"Начинаем парсинг {len(unique_seller_ids)} продавцов после закрытия всех воркеров продуктов")
-            seller_parser = OzonSellerParser(self.settings.MAX_WORKERS, user_id)
-            seller_results = seller_parser.parse_sellers(unique_seller_ids)
-            # Закрываем воркеры продавцов после завершения
-            seller_parser.cleanup()
-        
-        if self.stop_event.is_set():
-            return
-        
-        seller_data = {}
-        for seller in seller_results:
-            if seller.success:
-                seller_data[seller.seller_id] = seller
-        
-        end_time = time.time()
-        total_time = end_time - start_time
-        successful_products = len([p for p in product_results if p.success])
-        failed_products = len([p for p in product_results if not p.success])
-        avg_time_per_product = total_time / len(product_results) if product_results else 0
-        
-        # Сохраняем результаты для конкретного пользователя
-        user_results = {
-            'links': product_links,
-            'products': product_results,
-            'sellers': seller_results,
-            'category_url': category_url,
-            'total_products': len(product_results),
-            'successful_products': successful_products,
-            'failed_products': failed_products,
-            'total_sellers': len(seller_results),
-            'successful_sellers': len([s for s in seller_results if s.success]),
-            'output_folder': getattr(link_parser, 'output_folder', 'unknown'),
-            'seller_data': seller_data,
-            'selected_fields': selected_fields,
-            'parsing_stats': {
-                'total_time': total_time,
+        try:
+            # Начинаем сессию парсинга для пользователя
+            if user_id:
+                resource_manager.start_parsing_session(user_id, 'full_parsing', 0)
+            
+            link_parser = OzonLinkParser(category_url, self.settings.MAX_PRODUCTS, user_id)
+            
+            success, product_links = link_parser.start_parsing()
+            
+            if self.stop_event.is_set():
+                return
+            
+            if not success or not product_links:
+                logger.error("Не удалось собрать ссылки товаров")
+                return
+            
+            if self.stop_event.is_set():
+                return
+            
+            product_parser = OzonProductParser(self.settings.MAX_WORKERS, user_id)
+            product_results = product_parser.parse_products(product_links)
+            
+            # Принудительно закрываем все воркеры продуктов перед началом парсинга продавцов
+            product_parser.cleanup()
+            
+            if self.stop_event.is_set():
+                return
+            
+            seller_results = []
+            
+            if needs_seller_parsing:
+                seller_ids = []
+                total_products = len(product_results)
+                successful_products = len([p for p in product_results if p.success])
+                products_with_seller_id = 0
+                
+                for product in product_results:
+                    if product.success:
+                        if product.seller_id:
+                            seller_ids.append(product.seller_id)
+                            products_with_seller_id += 1
+                        else:
+                            logger.warning(f"Товар {product.article} ({product.name[:50]}) не имеет seller_id")
+                
+                unique_seller_ids = list(set(seller_ids))
+                logger.info(f"Статистика seller_id: всего товаров={total_products}, успешных={successful_products}, с seller_id={products_with_seller_id}, уникальных селлеров={len(unique_seller_ids)}")
+                
+                if unique_seller_ids:
+                    logger.info(f"Начинаем парсинг {len(unique_seller_ids)} продавцов (поля: {selected_fields})")
+                    seller_parser = OzonSellerParser(self.settings.MAX_WORKERS, user_id)
+                    seller_results = seller_parser.parse_sellers(unique_seller_ids)
+                    logger.info(f"✓ Парсинг селлеров завершен. Получено: {len(seller_results)}, успешных: {len([s for s in seller_results if s.success])}")
+                    # Закрываем воркеры продавцов после завершения
+                    seller_parser.cleanup()
+                else:
+                    logger.info("Нет ID селлеров для парсинга")
+            else:
+                logger.info(f"Парсинг селлеров пропущен: в selected_fields ({selected_fields}) нет полей селлера")
+            
+            if self.stop_event.is_set():
+                return
+            
+            seller_data = {}
+            for seller in seller_results:
+                if seller.success:
+                    seller_data[seller.seller_id] = seller
+            
+            end_time = time.time()
+            total_time = end_time - start_time
+            successful_products = len([p for p in product_results if p.success])
+            failed_products = len([p for p in product_results if not p.success])
+            avg_time_per_product = total_time / len(product_results) if product_results else 0
+            
+            # Сохраняем результаты для конкретного пользователя
+            user_results = {
+                'links': product_links,
+                'products': product_results,
+                'sellers': seller_results,
+                'category_url': category_url,
+                'total_products': len(product_results),
                 'successful_products': successful_products,
                 'failed_products': failed_products,
-                'average_time_per_product': avg_time_per_product
+                'total_sellers': len(seller_results),
+                'successful_sellers': len([s for s in seller_results if s.success]),
+                'output_folder': getattr(link_parser, 'output_folder', 'unknown'),
+                'seller_data': seller_data,
+                'selected_fields': selected_fields,
+                'parsing_stats': {
+                    'total_time': total_time,
+                    'successful_products': successful_products,
+                    'failed_products': failed_products,
+                    'average_time_per_product': avg_time_per_product
+                }
             }
-        }
-        
-        # Сохраняем результаты для пользователя
-        if user_id:
-            self.user_results[user_id] = user_results
-        
-        # Обновляем глобальные результаты для совместимости
-        self.last_results = user_results
-        
-        self._save_results_to_file(user_id)
-        self._export_to_excel(user_id)
-        self._send_report_to_telegram(user_id)
+            
+            # Сохраняем результаты для пользователя
+            if user_id:
+                self.user_results[user_id] = user_results
+            
+            # Обновляем глобальные результаты для совместимости
+            self.last_results = user_results
+            
+            self._save_results_to_file(user_id)
+            self._export_to_excel(user_id)
+            self._send_report_to_telegram(user_id)
+            
+        finally:
+            # Завершаем сессию парсинга для пользователя
+            if user_id:
+                resource_manager.finish_parsing_session(user_id)
     
+
     def _save_results_to_file(self, user_id: str = None):
         try:
             import json
